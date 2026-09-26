@@ -11,7 +11,6 @@ const TABLE_NAMES: Record<string, string> = {
   players_batting: 'hitting ratings',
   players_pitching: 'pitching ratings',
   players_fielding: 'fielding ratings',
-  players_value: 'player values',
   players_contract: 'contracts',
   players_contract_extension: 'contract extensions',
   players_roster_status: 'roster status',
