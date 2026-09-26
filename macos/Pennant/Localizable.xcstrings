@@ -230,6 +230,9 @@
     "Not found": {
       "extractionState": "manual"
     },
+    "Not known": {
+      "extractionState": "manual"
+    },
     "Nothing selected": {
       "extractionState": "manual"
     },
@@ -348,6 +351,9 @@
     "Show in Finder": {
       "extractionState": "manual"
     },
+    "Show why": {
+      "extractionState": "manual"
+    },
     "Standings": {
       "extractionState": "manual"
     },
@@ -403,7 +409,13 @@
     "Use This Save": {
       "extractionState": "manual"
     },
+    "What would change it": {
+      "extractionState": "manual"
+    },
     "Where Pennant looked": {
+      "extractionState": "manual"
+    },
+    "Why": {
       "extractionState": "manual"
     },
     "Wire": {

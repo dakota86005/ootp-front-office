@@ -20,6 +20,14 @@
         {
           "label": "Roster evidence",
           "value": "Transaction history unavailable"
+        },
+        {
+          "label": "How the save was found",
+          "value": "Not found"
+        },
+        {
+          "label": "Where Pennant looked",
+          "value": "No CSV export is configured."
         }
       ],
       "source": {

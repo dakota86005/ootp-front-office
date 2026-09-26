@@ -268,23 +268,26 @@ struct GeneralSettings: View {
     }
 }
 
-/// The data status as the server words it (`/api/v2/data-status`): the headline with a symbol for its tone, each
-/// source's line (why the log is unavailable in its help tag), the dates and places (a missing one saying why), and
-/// what to do. Every word is served; the labels are the served row labels.
+/// The data status as the server words it (`/api/v2/data-status`): the headline with a symbol for its tone and its
+/// basis one click away (the reasons are the breakdown, not the face), each source's line (why the log is unavailable in
+/// its help tag), the dates and places (a missing one saying why), and what to do. Every word is served; the labels are
+/// the served row labels.
 struct DataStatusSection: View {
     let dataStatus: Components.Schemas.DataStatusView?
 
     var body: some View {
         Section("Data status") {
             if let status = dataStatus {
-                Label {
-                    Text(verbatim: status.headline.text).font(.headline)
-                } icon: {
-                    ToneSymbol(tone: status.headline.tone)
-                }
-                .help(detail: status.headline.hint)
-                if !status.headline.basis.unknown.isEmpty {
-                    lines(status.headline.basis.unknown)
+                HStack {
+                    Label {
+                        Text(verbatim: status.headline.text).font(.headline)
+                    } icon: {
+                        ToneSymbol(tone: status.headline.tone)
+                    }
+                    .help(detail: status.headline.hint)
+                    Spacer()
+                    // The reasons, where the save was found and what the log reader said: the breakdown, one click away
+                    BasisButton(basis: status.headline.basis)
                 }
                 if let action = status.action {
                     Label { Text(verbatim: action.display) } icon: { Image(systemName: "arrow.forward.circle") }
@@ -321,15 +324,6 @@ struct DataStatusSection: View {
         .accessibilityIdentifier("settings.dataStatus")
     }
 
-    /// Served sentences, one row (a list's rows need identities of their own, and sentences can repeat).
-    private func lines(_ texts: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(texts.enumerated()), id: \.offset) { _, text in
-                Text(verbatim: text)
-            }
-        }
-        .foregroundStyle(.secondary)
-    }
 }
 
 // MARK: Appearance

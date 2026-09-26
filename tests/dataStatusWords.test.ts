@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { assessFreshness, type FreshnessInputs } from '../server/dataFreshness.js';
 import type { DataStatus, LogSourceStatus } from '../server/dataStatus.js';
 import { DISCOVERY_WORDS, dataStatusView, gameDateDisplay } from '../server/presentation/dataStatusWords.js';
-import { bannedInPayload } from './bannedJargon';
+import { BANNED_JARGON, BANNED_VERDICTS, basisStrings, bannedIn, shownStrings } from './bannedJargon';
 
 /**
  * The data status in words (SWIFTUI_REBUILD.md section 12, the N3 gaps): each level and source in a sentence, why the
@@ -48,7 +48,7 @@ describe('the level and each source, in a sentence', () => {
     expect(view.level).toBe('stale');
     expect(view.headline.text).toBe('League data is 4 days behind the save');
     expect(view.sources[0].cells.state).toMatchObject({ display: 'Behind by 4 days', tone: 'bad' });
-    expect(view.action?.display).toMatch(/Export fresh database data/);
+    expect(view.action?.display).toMatch(/Export the database from OOTP again/);
     expect(view.headline.basis.wouldChange).toEqual([view.action!.display]);
   });
 
@@ -97,7 +97,44 @@ describe('dates and places', () => {
     expect(Object.keys(DISCOVERY_WORDS).sort()).toEqual(['ancestor_lg', 'csv_layout', 'manual_override', 'not_found', 'save_name_match']);
   });
 
-  it('keeps every line plain: nothing the jargon list rejects, in any state', () => {
-    for (const view of [dataStatusView(current)]) expect(bannedInPayload(view)).toEqual([]);
+  it('keeps every line plain in every state: the face and the breakdown both pass the whole list', () => {
+    const logUnreadable = (reason: 'save_not_found' | 'database_missing' | 'unreadable', error: LogSourceStatus['error'] = null) =>
+      log({ readable: false, unavailableReason: reason, error });
+    const states: Record<string, DataStatus> = {
+      current,
+      stale: status({ saveSimulatedThrough: '2040-05-12', csvCurrentDate: '2040-05-09', log: { available: false, reason: 'save_not_found' } }, { log: logUnreadable('save_not_found') }),
+      logBehind: status({ saveSimulatedThrough: '2040-05-08', csvCurrentDate: '2040-05-09', log: { available: true, lastTransactionDate: '2040-05-06', coveredThrough: '2040-05-06' } }),
+      saveNotFound: status({ saveSimulatedThrough: null, csvCurrentDate: '2040-05-09', log: { available: false, reason: 'save_not_found' } }, {
+        save: { found: false, lgPath: null, discovery: 'not_found', discoveryNotes: ['The CSV folder is not inside <save>.lg/import_export/csv.'] }, log: logUnreadable('save_not_found'),
+      }),
+      logMissing: status({ saveSimulatedThrough: '2040-05-08', csvCurrentDate: '2040-05-09', log: { available: false, reason: 'database_missing' } }, { log: logUnreadable('database_missing', { code: 'missing', message: 'No text_data.sqlite3 in the save\'s temp folder.' }) }),
+      logTorn: status({ saveSimulatedThrough: '2040-05-08', csvCurrentDate: '2040-05-09', log: { available: false, reason: 'unreadable' } }, { log: logUnreadable('unreadable', { code: 'torn', message: 'The source changed while it was copied.' }) }),
+      unverified: status({ saveSimulatedThrough: null, csvCurrentDate: '2040-05-09', log: { available: true, lastTransactionDate: null, coveredThrough: null } }, { save: { simulatedThrough: null } }),
+      unavailable: status({ saveSimulatedThrough: '2040-05-08', csvCurrentDate: null, log: { available: false, reason: 'save_not_found' } }, { csv: { importedAt: null }, log: logUnreadable('save_not_found') }),
+      unconfigured: status({ saveSimulatedThrough: null, csvCurrentDate: null, log: { available: false, reason: 'save_not_found' } }, {
+        save: { found: false, lgPath: null, discovery: 'not_found', discoveryNotes: ['No CSV export is configured.'] }, csv: { exportedAt: null, importedAt: null }, log: logUnreadable('save_not_found'), configured: false,
+      }),
+    };
+    const levels = new Set<string>();
+    for (const [name, state] of Object.entries(states)) {
+      const view = dataStatusView(state);
+      levels.add(view.level);
+      const strings = [...shownStrings(view), ...basisStrings(view)];
+      expect(strings.length, name).toBeGreaterThan(8);
+      for (const { path, text } of strings) expect(bannedIn(text, [BANNED_JARGON, BANNED_VERDICTS]), `${name} ${path}: ${text}`).toEqual([]);
+    }
+    expect([...levels].sort()).toEqual(['current', 'partial', 'stale', 'unavailable']);
+  });
+
+  it('keeps how the save was found and what the log reader said in the breakdown', () => {
+    const view = dataStatusView(status({ saveSimulatedThrough: '2040-05-08', csvCurrentDate: '2040-05-09', log: { available: false, reason: 'unreadable' } }, {
+      save: { discovery: 'ancestor_lg', discoveryNotes: ['Found above the export folder.'] },
+      log: log({ readable: false, unavailableReason: 'unreadable', error: { code: 'invalid', message: 'The copy lacks the transactions table.' } }),
+    }));
+    expect(view.headline.basis.because).toEqual(expect.arrayContaining([
+      { label: 'How the save was found', value: 'Found in a folder above the export' },
+      { label: 'Where Pennant looked', value: 'Found above the export folder.' },
+      { label: 'What the log reader said', value: 'The copy lacks the transactions table.' },
+    ]));
   });
 });

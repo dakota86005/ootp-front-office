@@ -20,6 +20,14 @@
         {
           "label": "Roster evidence",
           "value": "Transaction history unavailable"
+        },
+        {
+          "label": "How the save was found",
+          "value": "Found from the export's folder"
+        },
+        {
+          "label": "What the log reader said",
+          "value": "No /tmp/pennant-contract-home/Library/Application Support/Out of the Park Developments/OOTP Baseball 27/saved_games/Test League.lg/temp/text_data.sqlite3 in the save's temp folder."
         }
       ],
       "source": {

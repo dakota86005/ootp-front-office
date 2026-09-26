@@ -143,6 +143,14 @@ const HEADLINES: Record<RosterEvidenceLevel, (s: DataStatus) => string> = {
   unavailable: () => 'No league data imported yet',
 };
 
+/** What to do, in the GM's words, when there is something to do (the freshness model's own action is React's). */
+const ACTIONS: Record<RosterEvidenceLevel, string | null> = {
+  current: null,
+  partial: null,
+  stale: 'Export the database from OOTP again and import it, so Pennant reads the save\'s latest day.',
+  unavailable: 'Export your OOTP database and import it to begin.',
+};
+
 const HEADLINE_TONE: Record<RosterEvidenceLevel, Tone> = { current: 'good', partial: 'caution', stale: 'bad', unavailable: 'bad' };
 
 function fact(id: string, label: string, value: string | null, missing: string, hint?: string): DataStatusFact {
@@ -159,15 +167,23 @@ export function dataStatusView(s: DataStatus): DataStatusView {
   const lines = sourceLines(s);
   const headlineText = HEADLINES[level](s);
   const gameDate = gameDateDisplay(s.csv.currentDate);
+  const action = ACTIONS[level];
+  // The breakdown: each source's line, how the save was found and where Pennant looked, and what the log reader said
+  const because = [
+    ...lines.map((l) => ({ label: l.source, value: l.state })),
+    { label: 'How the save was found', value: DISCOVERY_WORDS[s.save.discovery] ?? 'Not known' },
+    ...s.save.discoveryNotes.map((note) => ({ label: 'Where Pennant looked', value: note })),
+    ...(s.transactionLog.error?.message ? [{ label: 'What the log reader said', value: s.transactionLog.error.message }] : []),
+  ];
   const headline = claim({
     text: headlineText,
     tone: HEADLINE_TONE[level],
     hint: 'How current Pennant\'s copy of the league is against your OOTP save',
     basis: basis({
-      because: lines.map((l) => ({ label: l.source, value: l.state })),
+      because,
       source: { department: 'frontOffice', specialist: 'Data status', asOf: s.csv.importedAt, gameDate: s.csv.currentDate },
-      unknown: s.freshness.reasons,
-      wouldChange: s.freshness.action ? [s.freshness.action] : [],
+      unknown: [...new Set(s.freshness.reasons)],
+      wouldChange: action ? [action] : [],
       lean: null,
       certainty: 'fact',
     }),
@@ -192,6 +208,6 @@ export function dataStatusView(s: DataStatus): DataStatusView {
       row(l.id, { source: cell(l.source), state: cell(l.state, { tone: l.tone, ...(l.hint ? { hint: l.hint } : {}) }) }, { source: l.source, state: l.order }),
     ),
     facts,
-    action: s.freshness.action ? cell(s.freshness.action) : null,
+    action: action ? cell(action) : null,
   };
 }
