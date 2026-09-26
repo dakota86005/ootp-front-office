@@ -242,7 +242,7 @@ breaks the generated client fails the pull request.
 ### The Mac app
 
 The Xcode project is `macos/Pennant.xcodeproj` (scheme `Pennant`), over the local packages in `macos/Packages/`
-(PennantAPI, PennantKit, PennantDesign). The app carries the server inside it, so stage the server first; this runs
+(PennantAPI, PennantKit, PennantDesign, PennantFeatures). The app carries the server inside it, so stage the server first; this runs
 `build:sidecar` and `sidecar:node`, then installs the production dependencies for the bundled Node in their own folder
 (the repository's `node_modules` is left as it is, whichever ABI it holds):
 
@@ -273,7 +273,11 @@ PENNANT_DEV_DATA_DIR=/tmp/pennant-dev "<DerivedData>/Build/Products/Debug/Pennan
 ```
 
 The first start on a folder backs up its irreplaceable files to `backups/pre-swiftui-<date>/` (SWIFTUI_REBUILD.md
-section 7.5). The server's log is `server.log` in the log folder (`~/Library/Logs/Pennant/` for a release build).
+section 7.5). The server's log is `server.log` in the log folder (`~/Library/Logs/Pennant/` for a release build; Help ▸
+Server Log opens it). A synthetic league has no save chosen, so the Setup window opens: to run the flow, give it a pretend
+save, a `.lg` folder whose `import_export/csv/` holds any small CSV (`id,note` and a row or two), by typing its path.
+Relaunching restores each window's department, history, inspector and sidebar; add `-ApplePersistenceIgnoreState YES`
+to start fresh.
 
 **Tests.** One script runs them all, with output in `build/macos-test/` (summaries and failures are printed):
 
@@ -282,15 +286,24 @@ macos/scripts/test.sh
 ```
 
 It writes the synthetic league into a scratch folder, stages the server, runs each package's `swift test` (PennantKit's
-include an integration test that starts the real staged server), then `xcodebuild test` on the Pennant scheme with the
-app on a fresh scratch folder, and extracts the XCUITest screenshots into `build/macos-test/screenshots/`.
+and PennantFeatures' include integration tests that start the real staged server; PennantFeatures' runs the Setup flow),
+then `xcodebuild test` on the Pennant scheme, each XCUITest on a fresh scratch folder of its own, and extracts the XCUITest
+screenshots into `build/macos-test/screenshots/`.
 `PENNANT_TEST_NO_UI=1` skips the XCUITests; `PENNANT_TEST_UNSIGNED=1` builds unsigned. The XCUITests need UI automation,
 which the Mac's owner enables once (running the scheme's tests from Xcode asks for it). CI (`pennant-mac` in `ci.yml`)
-runs the PennantKit and PennantDesign tests and builds the app and its UI tests unsigned, without the server.
+runs the PennantKit, PennantDesign and PennantFeatures tests and builds the app and its UI tests unsigned, without the
+server.
+
+**Snapshots.** PennantFeatures' tests also draw the shell (the sidebar with the club card, the main window, each server
+state, each Setup step, each Settings tab) in light and dark at their real sizes into `build/macos-snapshots/`, from
+`contract/fixtures/`. They are for looking at, not compared; CI skips them. To draw only them:
+`cd macos/Packages/PennantFeatures && swift test --filter SnapshotTests`.
 
 The unknown-last comparator's cases (`contract/fixtures/sort-cases.json`) are shared: `tests/sortCases.test.ts` runs them
 against a TypeScript reference, PennantKit against the app. The String Catalog is checked against the banned-jargon list
-by `tests/stringCatalog.test.ts`.
+by `tests/stringCatalog.test.ts`, which also fails when a label written in the Swift sources (a `Text`, `Button`,
+`Label`, `Section`, a `title:` and the like) is missing from the app's catalog: the packages' views look their labels up
+there.
 
 ## Versions
 

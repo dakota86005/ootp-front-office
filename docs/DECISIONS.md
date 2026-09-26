@@ -2059,7 +2059,10 @@ production bundle grew by 18.7 kB (6.4 kB gzip: 518.4 to 537.1 kB, 149.7 to 156.
 
 **Status:** Accepted in direction by the owner (2026-09-25); drafted at milestone N0, and its details settle in the milestone
 that builds each part. **Implementation:** N1, the sidecar server (2026-09-25): `server/sidecar.ts`, the per-launch token,
-the data-folder lock, injected keys, `/api/v2/events`, the sidecar bundle and the pinned Node runtime. No Swift code yet.
+the data-folder lock, injected keys, `/api/v2/events`, the sidecar bundle and the pinned Node runtime. N3, the app
+skeleton (2026-09-26): `macos/` (the Xcode project, PennantKit, PennantDesign, PennantFeatures), the server inside the
+bundle, `ServerController`, the first-run backup, the window shell from the department registry (every view a structural
+placeholder), the commands, Setup and Settings.
 Design: [SWIFTUI_REBUILD.md](SWIFTUI_REBUILD.md). Refines D-008
 ("Electron embeds the same server and UI") for the Mac app; D-054 governs the React UI until cutover.
 

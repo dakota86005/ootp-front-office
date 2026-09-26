@@ -3,10 +3,10 @@
 **Status:** design, 2026-09-25. Milestone N0 is done (2026-09-25: the restore point, the decisions D-055 to D-060 and
 the D-052 amendment, the behaviour cases, the ground rules; section 12). Milestone N1 is done (2026-09-25: the sidecar
 server, section 5; "As built" below). Milestone N2 is done (2026-09-25: the contract pipeline, section 4.3; "As built"
-there). Milestone N3 is under way: its Stage A (2026-09-26: the Xcode project and packages, the server inside the app,
-`ServerController`, `AppModel`, the event client, routes, the comparator, backups and the test script; "As built at N3" in
-sections 5.2, 5.3, 6, 7 and 8) is built; Stage B, the window shell and first run, is next. Nothing else in this document is
-implemented yet. It supersedes the UI parts of the
+there). Milestone N3 is done (2026-09-26: the Xcode project and packages, the server inside the app, `ServerController`,
+`AppModel`, the event client, routes, the comparator, backups and the test script; then the window shell from the
+department registry, the commands, Setup and Settings; "As built at N3" in sections 3.1, 3.2, 3.6, 5.2, 5.3, 6, 7 and 8).
+Nothing else in this document is implemented yet. It supersedes the UI parts of the
 V2 web plan (`~/.claude/plans/okay-can-we-please-effervescent-cherny.md`, sections 3 and 4). The server-side
 parts of that plan (the Front Office contract, the Club Profile, the roster map, the horizon board, the league
 wire, snapshots and the GM's desk) carry over unchanged in intent and are scheduled here.
@@ -113,6 +113,20 @@ A visual mockup (HTML imitation of the SwiftUI look) is at <https://claude.ai/ar
 The last route, the inspector's visibility, table column settings and open player windows are restored per
 window (`@SceneStorage`, `TableColumnCustomization` is `Codable`, `.restorationBehavior`).
 
+**As built at N3 (2026-09-26).** Three scenes exist: main windows (`WindowGroup(id: "main")`, several allowed), Setup
+(`Window(id: "setup")`, not restored) and Settings (General, Appearance, AI; Updates arrive with N14). Each main window keeps
+its route with its Back/Forward history, the inspector's and the sidebar's visibility and its open departments in
+`@SceneStorage` (`MainWindowModel.restore`); a route this build does not know falls back to the first department's first
+view. The Setup window opens by itself once per launch when the server is up with no save chosen (served `configured`),
+and again from Club ▸ Import Export… or Settings ▸ Choose Save…. Its steps are React's first run: the saves the server
+found (`/api/saves`) and where it looked (`/api/search-locations`), or a folder typed or picked (`/api/resolve-folder`);
+choosing one (`POST /api/config`) starts the import, which the window follows from the served status (a determinate bar
+from the served file counts); then the clubs as served, the one the save's human manages first and the served club
+preselected, saved with `POST /api/settings` (added to the contract at N3 as `saveSettings`). Settings' General shows the
+save and export folder, the club, the data folder with Restore Backup (confirmed, all or nothing), naming the `.lg` folder
+by hand (`POST /api/save-source`) and the data status's served headline, reasons, action and dates; Appearance writes the
+served `theme` and applies it to every window; AI lists each provider's key status, read only until N13.
+
 ### 3.2 The main window
 
 - **Sidebar** (`NavigationSplitView`; floats as glass automatically on macOS 26+):
@@ -138,6 +152,16 @@ window (`@SceneStorage`, `TableColumnCustomization` is `Codable`, `.restorationB
   - the **staff** tab: chat about the selection.
 
   Controls use `.controlSize(.small)`.
+
+**As built at N3 (2026-09-26).** The sidebar comes from the department registry (section 6): the club card (the served
+club's name on its served colours, "Your club" or "Chosen in Settings"; no logo or record yet, neither is served), then
+each department disclosing its views, with a `badge(from:)` hook that draws nothing until the desk (N7). Following waits
+for N7. Every view is a structural placeholder ("Arrives in a later build"). The toolbar holds Back and Forward, the
+view's title, a subtitle made only of served values (the imported export's game date and the data status's own
+headline; else the last import's time; else nothing), the search field (no results yet), Ask Staff (disabled until N13)
+and the inspector toggle. The inspector has its evidence tab, empty. While the server is not ready the window shows its
+state instead (starting, restarting, failed with the server's sentence, the folder in use, the backup that failed, a
+Debug build with no folder chosen), with Show Log and Try Again; with no save chosen it offers Setup.
 
 ### 3.3 The four layers of depth, done the Mac way
 
@@ -232,6 +256,13 @@ The department's views sit beneath it in the sidebar.
   - each cell shows who is controlled and how;
   - prospects sit in a pipeline lane with their readiness range, never placed in a season;
   - a committed-payroll line runs against a budget `RuleMark`.
+
+**As built at N3 (2026-09-26).** The menus: Go (the departments ⌘1 to ⌘9 in the registry's order, Back ⌘[, Forward ⌘]),
+View (Show Sidebar ⌃⌘S from `SidebarCommands`, Show Inspector ⌥⌘I), Club (Refresh Data ⌘R: an import, after which every
+store reloads on the moved import stamp, as React's refresh reloads the page; Import Export…: Setup at the save step;
+Data Status: Settings ▸ General at the data status) and Help ▸ Server Log. Go and View act on the key main window through
+`@FocusedValue`; what can act is `CommandAvailability`, tested. Find Anything, the Player menu, search tokens, drag and
+drop and context menus arrive with the views that need them.
 
 ### 3.7 Visual language
 
@@ -598,6 +629,23 @@ with scripted processes, and `ServerIntegrationTests` with the real staged serve
 - The String Catalog (`Pennant/Localizable.xcstrings`) holds structural labels only; `tests/stringCatalog.test.ts`
   checks every key and translation against `tests/bannedJargon.ts`.
 
+**As built at N3, Stage B (2026-09-26).**
+- **PennantFeatures** (`macos/Packages/PennantFeatures`): `FeatureCore` (`DepartmentModule`, `DepartmentViewDescriptor`,
+  `DepartmentRegistry`, `NavigationHistory`, the placeholder, the import progress view, `ServedText`), one target per
+  department (FrontOffice, MajorLeague, Farm, Scouting, Trades, Finance, Medical, League, Philosophy; each exports a
+  module whose views are section 3.5's), `Shell` (the main window, sidebar, toolbar, inspector, server states,
+  `MainWindowModel`, `AppRouting`, `CommandAvailability`, Settings, fixture-fed previews) and `Setup` (`SetupModel`, a
+  tested state machine, and its window). Player and StaffRoom join when first needed. `badge(from:)` takes the
+  `AppModel` (which will hold the desk's served counts) rather than a `FrontOfficeSummary`, which is not served yet.
+- The app target is thin: `Registry.swift` assembles the registry from the nine modules (checked in Debug), the scenes,
+  `@SceneStorage`, and `PennantCommands`.
+- The packages' views look their labels up in the app's bundle, so the app's one String Catalog holds every structural
+  label, and `tests/stringCatalog.test.ts` fails when a label in the Swift sources is missing from it. Section 3.5's
+  "Bench & coverage" is "Bench & Backups": "coverage" is on the banned-jargon list.
+- **PennantDesign** gained `ClubTint` (the served club colours, with text held to WCAG 4.5:1, or 7:1 under Increase
+  Contrast; no served colour means the accent) and `ClubCard`. Tone colours wait for N5, which first needs them.
+- Contract: `POST /api/settings` (`saveSettings`: `SettingsUpdate` in, `SettingsSaved` out, typed beside the handler).
+
 ---
 
 ## 7. Coexistence and the way back
@@ -678,6 +726,14 @@ The rebuild is one big rewrite, but it is built so that *any* point can be aband
   extracts the XCUITest screenshots into `build/macos-test/screenshots/`. The XCUITests need UI automation, which the
   Mac's owner enables once (it asks for a password); until then they cannot drive the app. CI builds the app and its UI
   tests unsigned without the server, and runs the package tests.
+- *As built at N3, Stage B:* the XCUITests (start and quit; Setup on a pretend save through the import to a saved club;
+  every department by ⌘1 to ⌘9 and the sidebar, Back/Forward, the inspector, `performAccessibilityAudit`, Settings' tabs)
+  each run on a data folder of their own. PennantFeatures' tests draw snapshots of the sidebar with the club card, the main
+  window, every server state, every Setup step and every Settings tab, light and dark at their real sizes, into
+  `build/macos-snapshots/` (skipped on CI). They host each view in an off-screen window and draw it with `cacheDisplay`,
+  which draws the AppKit-backed controls `ImageRenderer` cannot; the split view's floating glass sidebar does not draw that
+  way, so the main window's pictures lay the sidebar, drawn on its own, over its column, and a selected row's highlight
+  draws black. A real-server test runs the Setup flow end to end.
 - **Manual matrix per milestone:**
   - light and dark; Reduce Transparency; Increase Contrast; Reduce Motion; VoiceOver spot check;
   - window widths 900, 1280 and 1728+;
@@ -801,10 +857,14 @@ then-current release in the same major version.
 **N2 is done (2026-09-25):** the contract pipeline, on `feature/swiftui-n2-contract` with its PR into `feature/swiftui`
 (section 4.3, "As built").
 
-**Next: N3, the app skeleton** (sections 6 and 9). Open a fresh session on `feature/swiftui` (after the N2 PR merges)
-and say **"Continue the SwiftUI rebuild at N3 (docs/SWIFTUI_REBUILD.md)."** Branch `feature/swiftui-n3-skeleton` from
-`feature/swiftui` and open its PR into `feature/swiftui`. N3 builds on PennantAPI and the operations N2 described; a
-route the skeleton needs that is not in `server/contract/routes.ts` is added there first, then `npm run contract:build`.
+**N3 is done (2026-09-26):** the app skeleton, on `feature/swiftui-n3-skeleton` with its PR into `feature/swiftui`
+(sections 3.1, 3.2, 3.6, 5.2, 5.3, 6, 7 and 8, "As built at N3"). What the shell wanted to say and the server does not
+serve yet waits for N4: the data status's codes in words (the level, each source's state, why the log is unavailable), a
+sentence for a value that is missing, the import's phase in words, and why a chosen save did not start importing.
+
+**Next: N4, the presentation foundation (server)** (section 9). Open a fresh session on `feature/swiftui` (after the N3
+PR merges) and say **"Continue the SwiftUI rebuild at N4 (docs/SWIFTUI_REBUILD.md)."** Branch `feature/swiftui-n4-presentation`
+from `feature/swiftui` and open its PR into `feature/swiftui`.
 
 Read first: AGENTS.md, this document, D-001, D-008, D-018, D-020, D-043, D-046, D-049, D-052 (with its
 amendments), D-054 and D-055 to D-060.

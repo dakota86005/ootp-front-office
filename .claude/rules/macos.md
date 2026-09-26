@@ -60,9 +60,13 @@ and those documents differ, they win. The presentation cases are in `docs/BEHAVI
   repository's `node_modules` is never rebuilt for it). Run a Debug build or a test only on a scratch data folder
   (`PENNANT_DEV_DATA_DIR`, `npm run synthetic:league`), never the real one or `data/`; a Debug build given no folder
   starts no server. Every launch is gated on the first-run backup inside `ServerController`. The current club is
-  served (`organization` on `/api/settings`); Swift never resolves it. SWIFTUI_REBUILD.md sections 5.2, 5.3, 6 and 7.5,
-  "As built at N3", have the details.
+  served (`organization` on `/api/settings`); Swift never resolves it. The departments and their views live in
+  PennantFeatures (one target per department, each a `DepartmentModule`); the app target assembles the registry, and a
+  new view is a new `DepartmentViewDescriptor`. Every structural label goes in the app's String Catalog
+  (`macos/Pennant/Localizable.xcstrings`; `tests/stringCatalog.test.ts` checks the Swift sources against it). Snapshots
+  of the shell land in `build/macos-snapshots/`. SWIFTUI_REBUILD.md sections 3.1, 3.2, 3.6, 5.2, 5.3, 6 and 7.5, "As
+  built at N3", have the details.
 - **Quit only through `QuitCoordinator.requestQuit()`**, never `NSApp.terminate` from a `Task` or main-queue block (the
   `.terminateLater` wait cannot drain the main queue); `applicationShouldTerminate` answers through `shouldTerminate`.
 - Verify with `macos/scripts/test.sh` plus the server baseline; visual checks come from XCUITest and
-  `ImageRenderer` PNGs, not from asking the owner to look.
+  snapshot PNGs (`build/macos-snapshots/`), not from asking the owner to look.
