@@ -122,10 +122,17 @@ and again from Club ▸ Import Export… or Settings ▸ Choose Save…. Its ste
 found (`/api/saves`) and where it looked (`/api/search-locations`), or a folder typed or picked (`/api/resolve-folder`);
 choosing one (`POST /api/config`) starts the import, which the window follows from the served status (a determinate bar
 from the served file counts); then the clubs as served, the one the save's human manages first and the served club
-preselected, saved with `POST /api/settings` (added to the contract at N3 as `saveSettings`). Settings' General shows the
-save and export folder, the club, the data folder with Restore Backup (confirmed, all or nothing), naming the `.lg` folder
-by hand (`POST /api/save-source`) and the data status's served headline, reasons, action and dates; Appearance writes the
-served `theme` and applies it to every window; AI lists each provider's key status, read only until N13.
+preselected, saved with `POST /api/settings` (added to the contract at N3 as `saveSettings`). The club step comes only
+after a new import landed (the served last import's finish time moved); an import that failed, stopped partway (served
+`importInterruptedSince`) or never began is shown with Try Again. Nothing is chosen while an import runs, and the server
+refuses a second one: `POST /api/config` and `POST /api/import` answer 409 with a plain sentence while an import runs
+(added at N3; choosing a save used to start a second import writing the same database). Settings' General has the OOTP
+save (name, export, Choose Save…, Import Now), the club, the transaction log's `.lg` folder named by hand
+(`POST /api/save-source`, with a caption saying what it is for), the data status's served headline, reasons, action and
+dates, and the data folder with Restore Backup (confirmed, all or nothing, not during an import); Appearance writes the
+served `theme` and applies it to every window once saved; AI lists each provider's key status, read only until N13. A
+request that fails shows the server's sentence, or one of three structural lines ("Couldn't reach the Pennant server",
+"The Pennant server isn't running", "The request failed") with the raw error in the help tag and the log, never as text.
 
 ### 3.2 The main window
 
@@ -154,8 +161,9 @@ served `theme` and applies it to every window; AI lists each provider's key stat
   Controls use `.controlSize(.small)`.
 
 **As built at N3 (2026-09-26).** The sidebar comes from the department registry (section 6): the club card (the served
-club's name on its served colours, "Your club" or "Chosen in Settings"; no logo or record yet, neither is served), then
-each department disclosing its views, with a `badge(from:)` hook that draws nothing until the desk (N7). Following waits
+club's name on its served colours, "Your club" or "Chosen in Settings"; no logo or record yet, neither is served;
+neutral, with the system fill and primary text, when no colour is served, team colours are off (served `useTeamColors`),
+or no text reaches 4.5:1 (7:1 under Increase Contrast) on the served fill), then each department disclosing its views, with a `badge(from:)` hook that draws nothing until the desk (N7). Following waits
 for N7. Every view is a structural placeholder ("Arrives in a later build"). The toolbar holds Back and Forward, the
 view's title, a subtitle made only of served values (the imported export's game date and the data status's own
 headline; else the last import's time; else nothing), the search field (no results yet), Ask Staff (disabled until N13)
@@ -225,7 +233,7 @@ The department's views sit beneath it in the sidebar.
 | Department (head from the save) | Views |
 |---|---|
 | **Front Office** (GM) | Morning Report · Storylines (AI) · GM Briefing (AI) |
-| **Major League Ops** (bench coach) | Report · Position players · Pitching staff · Bench & coverage · Decision · Lineup · Pitching availability · Schedule & game plans · Depth chart · 40-man & options · Rosters · Season trends |
+| **Major League Ops** (bench coach) | Report · Position players · Pitching staff · Bench & backups (named "Bench & coverage" until N3: "coverage" is on the banned-jargon list, meant for interval coverage; the owner decides the name) · Decision · Lineup · Pitching availability · Schedule & game plans · Depth chart · 40-man & options · Rosters · Season trends |
 | **Farm & Development** (minor league staff) | Report · Organization · Affiliates · Assignments · Prospects · Development tracking · Decision |
 | **Scouting** (scouting director) | Draft board · Player search |
 | **Trades** (assistant GM) | Trade desk (offers, builder, analysis, league fits) |
@@ -373,7 +381,7 @@ Everything new lives under `/api/v2/`, so the React app keeps working on the old
 |---|---|---|
 | Types | `server/contract/index.ts` | Re-exports the server's own types; a reused route that answered an untyped object now has an exported type beside its handler, which is typed against it (`ServerStatus`, `ImportAccepted`, `Ok`, `ApiError`, `SearchLocations`, `SaveSourceResult`, `SettingsResponse`, `ProvidersResponse`, `Org`, the request bodies). Payloads unchanged. `GameDate` lives beside `parseGameDate` and types the data status's game dates. `Integer` (`server/contract/primitives.ts`, `@asType integer`) types ids and counts, so Swift reads `Int`; a true decimal stays `number`. |
 | Operations | `server/contract/routes.ts` | `GET /api/v2/events` (stream), and the reused `GET /api/status`, `POST /api/import`, `GET /api/saves`, `GET /api/search-locations`, `POST /api/resolve-folder`, `POST /api/config`, `GET /api/data-status`, `POST /api/save-source`, `GET /api/settings`, `GET /api/settings/providers`, `GET /api/orgs`. The other legacy routes are not described. |
-| Build | `npm run contract:build` (`scripts/lib/contractSpec.ts`) → `contract/openapi.json` | OpenAPI 3.1, deterministic. A string union of two or more values becomes `anyOf: [{type: string, enum}, {type: string}]`; a single literal (an event's `type`) stays a one-value enum. A union of types (`number \| string \| null`, as `Row.sort` will be) becomes one `anyOf` member per type, `"null"` on the last (the generator reads only a `type` array's first type). `X \| null` is written the way swift-openapi-generator reads it: `type: [T, "null"]` inline, or the reference alone with the property left out of `required` (a `{type: "null"}` member makes the generator drop the property). So the published spec is looser than the server there (the strict form the tests use keeps `required`), and Swift cannot tell a missing field from a null one: a future request body (the desk's PUT, N7) must not give "absent" and "null" different meanings. No `additionalProperties: false`. Bearer security. The build refuses two different types with one name, and an exported generic: export a concrete alias instead (`export type ClaimRow = Row<Claim>`), which becomes one named component. |
+| Build | `npm run contract:build` (`scripts/lib/contractSpec.ts`) → `contract/openapi.json` | OpenAPI 3.1, deterministic. A string union of two or more values becomes `anyOf: [{type: string, enum}, {type: string}]`; a single literal (an event's `type`) stays a one-value enum. A union of types (`number \| string \| null`, as `Row.sort` will be) becomes one `anyOf` member per type, `"null"` on the last (the generator reads only a `type` array's first type). `X \| null` is written the way swift-openapi-generator reads it: `type: [T, "null"]` inline, or the reference alone with the property left out of `required` (a `{type: "null"}` member makes the generator drop the property). So the published spec is looser than the server there (the strict form the tests use keeps `required`), and Swift cannot tell a missing field from a null one: a future request body (the desk's PUT, N7) must not give "absent" and "null" different meanings. *As built at N3:* the generated client never encodes an explicit `null` either (a nil optional is left out), so no request can clear a field by sending null; clearing needs an explicit request field or a `/v2` route (`SettingsUpdate.defaultOrgId` cannot go back to "automatic"). No `additionalProperties: false`. Bearer security. The build refuses two different types with one name, and an exported generic: export a concrete alias instead (`export type ClaimRow = Row<Claim>`), which becomes one named component. |
 | Events | `ServerEvent` in the spec; `ServerEventReading` in PennantAPI | Each event is a named component, and `ServerEvent` is their `anyOf` with `UnknownServerEvent` (`{type: string}`) last. The generator makes a struct of optionals, one per shape, and never throws: a known event fills its own and the catch-all; an unknown one, or a known one whose payload did not decode, fills only the catch-all. `event.reading` tells them apart from the generated types: `known`, `unknown(type:)` (ignore it) or `malformed(type:)` (a type this build knows that did not decode: the N3 event client reports it and re-reads `/api/status`, never ignores it). The stream's response is `text/event-stream` with no schema (the generator's pattern); the client decodes with `asDecodedServerSentEventsWithJSONData(of: Components.Schemas.ServerEvent.self)`. |
 | Tests | `tests/contract.test.ts`, `tests/bannedJargon.ts`, `tests/apiRoutes.ts`, `tests/contractShapes/` | The committed spec equals a fresh build. Every `/v2` route (a sub-router's mount path included) is in `routes.ts` and every listed operation is registered and in the spec, both ways; a reused route is described only when listed. Every JSON GET answers the synthetic save in its strict shape (ajv 2020, enums closed, `unevaluatedProperties: false`); each POST is checked in the answers safe to cause in a temporary data folder (its 400s; `resolve-folder` and `save-source` also 200), but not the 200s of `config` and `import`, which would start an import. The hello, an import and a job on the live stream validate. The answers and events are captured, made stable, into `contract/fixtures/` (`npm run contract:fixtures` rewrites them; the test fails while they differ), and the Swift tests decode those same bytes. The banned-jargon list applies to every `/v2` `text`, `hint` and `display`; it was tuned on Player Value's pages, so before department copy moves (N8) it needs a scoped exception (per field or department) for plain words it would reject ("Win Pct", "prior season", "waiver priority"), never a weakened pattern. |
 | Swift | `macos/Packages/PennantAPI` | swift-openapi-generator 1.13.1 as a build plugin (types and client, public, idiomatic names) over a link to `contract/openapi.json`; runtime 1.12.1, URLSession transport 1.3.1; `BearerTokenMiddleware`, `ServerEventReading`. A second test target, `ContractShapesTests`, generates types from the tests' shape contract (`tests/contractShapes/`) to prove shapes the contract will need (a number-or-string sort key, an `Int`, a concrete alias of a generic). macOS 26, swift-tools-version 6.2. CI builds and tests it on `macos-26` with `--force-resolved-versions`, caching `.build`. The package imports `HTTPTypes` and `OpenAPIRuntime` through the approved packages without declaring swift-http-types. |
@@ -641,7 +649,10 @@ with scripted processes, and `ServerIntegrationTests` with the real staged serve
   `@SceneStorage`, and `PennantCommands`.
 - The packages' views look their labels up in the app's bundle, so the app's one String Catalog holds every structural
   label, and `tests/stringCatalog.test.ts` fails when a label in the Swift sources is missing from it. Section 3.5's
-  "Bench & coverage" is "Bench & Backups": "coverage" is on the banned-jargon list.
+  "Bench & coverage" is "Bench & Backups": "coverage" is on the banned-jargon list (the owner decides the name). The
+  sidebar is 270 to 380 pt wide (ideal 280) so every view title fits at the default text size (`SidebarWidthTests`).
+  `RequestProblem` (PennantKit) and `ProblemLine` (FeatureCore) turn a failed request into the server's sentence or a
+  structural line, the raw error going to the log.
 - **PennantDesign** gained `ClubTint` (the served club colours, with text held to WCAG 4.5:1, or 7:1 under Increase
   Contrast; no served colour means the accent) and `ClubCard`. Tone colours wait for N5, which first needs them.
 - Contract: `POST /api/settings` (`saveSettings`: `SettingsUpdate` in, `SettingsSaved` out, typed beside the handler).
@@ -727,8 +738,9 @@ The rebuild is one big rewrite, but it is built so that *any* point can be aband
   Mac's owner enables once (it asks for a password); until then they cannot drive the app. CI builds the app and its UI
   tests unsigned without the server, and runs the package tests.
 - *As built at N3, Stage B:* the XCUITests (start and quit; Setup on a pretend save through the import to a saved club;
-  every department by ⌘1 to ⌘9 and the sidebar, Back/Forward, the inspector, `performAccessibilityAudit`, Settings' tabs)
-  each run on a data folder of their own. PennantFeatures' tests draw snapshots of the sidebar with the club card, the main
+  every department by ⌘1 to ⌘9 and the sidebar, Back/Forward, the inspector, `performAccessibilityAudit`, Settings' tabs,
+  each on a data folder of its own) are written and compile, but have not run yet: they need UI automation, which the
+  owner has been asked to enable. PennantFeatures' tests draw snapshots of the sidebar with the club card, the main
   window, every server state, every Setup step and every Settings tab, light and dark at their real sizes, into
   `build/macos-snapshots/` (skipped on CI). They host each view in an off-screen window and draw it with `cacheDisplay`,
   which draws the AppKit-backed controls `ImageRenderer` cannot; the split view's floating glass sidebar does not draw that
@@ -859,8 +871,22 @@ then-current release in the same major version.
 
 **N3 is done (2026-09-26):** the app skeleton, on `feature/swiftui-n3-skeleton` with its PR into `feature/swiftui`
 (sections 3.1, 3.2, 3.6, 5.2, 5.3, 6, 7 and 8, "As built at N3"). What the shell wanted to say and the server does not
-serve yet waits for N4: the data status's codes in words (the level, each source's state, why the log is unavailable), a
-sentence for a value that is missing, the import's phase in words, and why a chosen save did not start importing.
+serve yet waits for N4:
+- the data status's codes in words (the level, each source's state and lag, why the log is unavailable, how the save was
+  found);
+- a sentence for a value that is missing (rows whose served value is null are left out for now);
+- the import's phase in words, and a display name for the table being written (the raw OOTP file name is only in the help
+  tag);
+- why a chosen save did not start importing, and why an import did not finish (the window says so structurally);
+- the words for where an AI key comes from (Keychain, environment, data folder), mapped from the served code for now;
+- the club card's record and logo;
+- a display form of the game date in the subtitle (it is shown as served, unpadded as OOTP writes it);
+- the sentences for failed requests: the app shows three structural lines, and the server could say more.
+
+A contract rule found at N3: the generated client never sends an explicit `null` (an optional field left nil is left
+out), so a request cannot clear a field by sending null. `defaultOrgId` cannot go back to "automatic" from the Mac app.
+Clearing an optional field needs an explicit request field (for example `clubChoice: "automatic"`) or a `/v2` route
+(section 4.3).
 
 **Next: N4, the presentation foundation (server)** (section 9). Open a fresh session on `feature/swiftui` (after the N3
 PR merges) and say **"Continue the SwiftUI rebuild at N4 (docs/SWIFTUI_REBUILD.md)."** Branch `feature/swiftui-n4-presentation`

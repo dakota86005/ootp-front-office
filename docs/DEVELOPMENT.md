@@ -290,7 +290,8 @@ and PennantFeatures' include integration tests that start the real staged server
 then `xcodebuild test` on the Pennant scheme, each XCUITest on a fresh scratch folder of its own, and extracts the XCUITest
 screenshots into `build/macos-test/screenshots/`.
 `PENNANT_TEST_NO_UI=1` skips the XCUITests; `PENNANT_TEST_UNSIGNED=1` builds unsigned. The XCUITests need UI automation,
-which the Mac's owner enables once (running the scheme's tests from Xcode asks for it). CI (`pennant-mac` in `ci.yml`)
+which the Mac's owner enables once (running the scheme's tests from Xcode asks for it); until then they are written and
+compile but do not run. CI (`pennant-mac` in `ci.yml`)
 runs the PennantKit, PennantDesign and PennantFeatures tests and builds the app and its UI tests unsigned, without the
 server.
 
