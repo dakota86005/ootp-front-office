@@ -21,17 +21,33 @@ struct ClubTintTests {
         #expect(ClubTint(background: "#777777", foreground: "#888888").textChoice(increasedContrast: false) != .served)
         #expect(ClubTint(background: "#ffffff", foreground: "#dddddd").textChoice(increasedContrast: false) == .black)
         #expect(ClubTint(background: "#000000", foreground: nil).textChoice(increasedContrast: false) == .white)
-        // #0000ee on white is about 9.2:1, #d11 on white about 5:1: fine normally, not with Increase Contrast
         let red = ClubTint(background: "#ffffff", foreground: "#dd1111")
         #expect(red.textChoice(increasedContrast: false) == .served)
         #expect(red.textChoice(increasedContrast: true) == .black)
     }
 
-    @Test("no served background: the accent, never an invented club colour")
+    @Test("a fill on which neither black nor white reads at the needed contrast is drawn neutral")
+    func neitherReads() {
+        // Mid grey: about 4.7:1 with black, 4.5 with white; neither reaches 7:1
+        let grey = ClubTint(background: "#777777", foreground: "#888888")
+        #expect(grey.textChoice(increasedContrast: false) == .black)
+        #expect(grey.textChoice(increasedContrast: true) == .neutral)
+        #expect(grey.fill(increasedContrast: true) == nil)
+    }
+
+    @Test("no served background: neutral, never white on the accent or an invented club colour")
     func noServedFill() {
         let tint = ClubTint(background: nil, foreground: "#ffffff")
-        #expect(!tint.hasServedFill)
-        #expect(tint.textChoice(increasedContrast: false) == .white)
-        #expect(!ClubTint(background: "navy", foreground: nil).hasServedFill)
+        #expect(tint.textChoice(increasedContrast: false) == .neutral)
+        #expect(tint.fill(increasedContrast: false) == nil)
+        #expect(tint.text(increasedContrast: false) == nil)
+        #expect(ClubTint(background: "navy", foreground: nil).textChoice(increasedContrast: false) == .neutral)
+    }
+
+    @Test("team colours turned off (the served useTeamColors) draw the card neutral")
+    func teamColoursOff() {
+        let tint = ClubTint(background: "#1d2d44", foreground: "#f0ebd8", useTeamColors: false)
+        #expect(tint.textChoice(increasedContrast: false) == .neutral)
+        #expect(tint.fill(increasedContrast: false) == nil)
     }
 }

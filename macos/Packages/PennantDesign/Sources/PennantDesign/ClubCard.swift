@@ -5,7 +5,8 @@ import SwiftUI
 /// served, the line is a structural label.
 ///
 /// The colour is never the only signal: the name is always written. With Increase Contrast the card gets a border and
-/// its text is held to 7:1; it is opaque, so Reduce Transparency changes nothing, and it does not move.
+/// its text is held to 7:1; with no served colour (or team colours off) it is neutral (`ClubTint`). It is opaque on a
+/// served colour, and it does not move.
 public struct ClubCard: View {
     private let name: String
     private let detail: Text?
@@ -27,6 +28,7 @@ public struct ClubCard: View {
 
     public var body: some View {
         let increased = contrast == .increased
+        let fill = tint.fill(increasedContrast: increased)
         let text = tint.text(increasedContrast: increased)
         HStack(spacing: 10) {
             Image(systemName: symbol)
@@ -39,15 +41,20 @@ public struct ClubCard: View {
                 if let detail {
                     detail
                         .font(.caption)
-                        .opacity(increased ? 1 : 0.85)
                 }
             }
             Spacer(minLength: 0)
         }
-        .foregroundStyle(text)
+        .foregroundStyle(text.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.primary))
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(tint.fill, in: .rect(cornerRadius: 10))
+        .background {
+            if let fill {
+                RoundedRectangle(cornerRadius: 10).fill(fill)
+            } else {
+                RoundedRectangle(cornerRadius: 10).fill(.fill.tertiary)
+            }
+        }
         .overlay {
             if increased {
                 RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary, lineWidth: 1.5)
@@ -60,7 +67,7 @@ public struct ClubCard: View {
 
 #Preview("Club card") {
     VStack {
-        ClubCard(name: "Club 1 N", detail: Text(verbatim: "Your club"), tint: ClubTint(background: "#1d2d44", foreground: "#f0ebd8"))
+        ClubCard(name: "Club 1 N", detail: Text("Your club"), tint: ClubTint(background: "#1d2d44", foreground: "#f0ebd8"))
         ClubCard(name: "Low contrast", detail: nil, tint: ClubTint(background: "#777777", foreground: "#888888"))
         ClubCard(name: "No colours served", detail: nil, tint: ClubTint(background: nil, foreground: nil))
     }

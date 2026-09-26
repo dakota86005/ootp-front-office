@@ -1,13 +1,13 @@
 import SwiftUI
 
 /// A club's colours as the server serves them (`colors` on `/api/orgs`), ready to draw: the fill, and text that stays
-/// readable on it. A colour the server did not serve is never invented: without a served background the tint is the
-/// system accent, and without a served foreground the text is whichever of black or white reads better.
+/// readable on it. A colour the server did not serve is never invented.
 ///
-/// Readability follows WCAG's contrast ratio: 4.5:1 normally, 7:1 when the GM has turned on Increase Contrast. When the
-/// served foreground falls short on the served background, the text becomes black or white instead (the club's own
-/// pair is kept whenever it reads). This is drawing, not a judgment about the club; the palette itself moves
-/// server-side with `derivePalette` (SWIFTUI_REBUILD.md section 3.7).
+/// Readability follows WCAG's contrast ratio: 4.5:1 normally, 7:1 when the GM has turned on Increase Contrast. The
+/// club's own foreground is used when it reads on the served fill; else black or white, whichever reads; and when
+/// neither does, or no fill is served, or the GM turned team colours off (the served `useTeamColors`), the card is
+/// neutral: the system's fill with the primary text colour, never white on the accent. This is drawing, not a judgment
+/// about the club; the palette itself moves server-side with `derivePalette` (SWIFTUI_REBUILD.md section 3.7).
 nonisolated public struct ClubTint: Sendable, Equatable {
     /// The served background (`bg`), as `#rrggbb`; nil when none was served.
     public var background: String?
@@ -15,49 +15,56 @@ nonisolated public struct ClubTint: Sendable, Equatable {
     public var foreground: String?
     /// The served secondary colour.
     public var secondary: String?
+    /// The served preference to draw team colours (`useTeamColors`); false draws the card neutral.
+    public var useTeamColors: Bool
 
-    public init(background: String?, foreground: String?, secondary: String? = nil) {
+    public init(background: String?, foreground: String?, secondary: String? = nil, useTeamColors: Bool = true) {
         self.background = background
         self.foreground = foreground
         self.secondary = secondary
+        self.useTeamColors = useTeamColors
     }
 
     /// The contrast ratio the text needs on the fill.
     public static func requiredContrast(increased: Bool) -> Double { increased ? 7 : 4.5 }
 
-    /// The fill: the served background, else the accent colour.
-    public var fill: Color { ServedColor.color(background) ?? .accentColor }
-
-    /// Whether a served background exists (so the card is in the club's colour rather than the accent's).
-    public var hasServedFill: Bool { ServedColor.components(background) != nil }
-
-    /// Which text to draw on the fill.
+    /// How to draw the card.
     public enum TextChoice: Sendable, Equatable {
-        /// The club's own foreground reads well enough.
+        /// The served fill with the club's own foreground, which reads well enough.
         case served
+        /// The served fill with black text.
         case black
+        /// The served fill with white text.
         case white
+        /// No club colour: the system fill with the primary text colour.
+        case neutral
     }
 
-    /// The text for the fill: the served foreground when it reads at the needed contrast, else black or white,
-    /// whichever reads better. With no served background, white on the accent.
+    /// The drawing for the needed contrast.
     public func textChoice(increasedContrast: Bool) -> TextChoice {
-        guard let fill = ServedColor.components(background) else { return .white }
+        guard useTeamColors, let fill = ServedColor.components(background) else { return .neutral }
         let needed = Self.requiredContrast(increased: increasedContrast)
         if let text = ServedColor.components(foreground), Self.contrast(fill, text) >= needed {
             return .served
         }
         let onBlack = Self.contrast(fill, (0, 0, 0))
         let onWhite = Self.contrast(fill, (1, 1, 1))
+        if max(onBlack, onWhite) < needed { return .neutral }
         return onBlack >= onWhite ? .black : .white
     }
 
-    /// The text colour for the fill.
-    public func text(increasedContrast: Bool) -> Color {
+    /// The served fill's colour, or nil when the card is neutral.
+    public func fill(increasedContrast: Bool) -> Color? {
+        textChoice(increasedContrast: increasedContrast) == .neutral ? nil : ServedColor.color(background)
+    }
+
+    /// The text colour on the served fill, or nil when the card is neutral (the primary style).
+    public func text(increasedContrast: Bool) -> Color? {
         switch textChoice(increasedContrast: increasedContrast) {
-        case .served: ServedColor.color(foreground) ?? .white
+        case .served: ServedColor.color(foreground)
         case .black: .black
         case .white: .white
+        case .neutral: nil
         }
     }
 
