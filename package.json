@@ -27,6 +27,8 @@
     "desktop:build": "npm run build && node scripts/build-desktop.mjs",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "sidecar:node": "node scripts/fetch-node-runtime.mjs",
+    "synthetic:league": "tsx scripts/synthetic-league.ts",
+    "mac:stage": "bash macos/scripts/stage-server.sh",
     "desktop": "npm run abi:electron && npm run desktop:build && electron .",
     "dist": "npm run abi:electron && npm run desktop:build && electron-builder",
     "dist:mac": "npm run abi:electron && npm run desktop:build && electron-builder --mac",
