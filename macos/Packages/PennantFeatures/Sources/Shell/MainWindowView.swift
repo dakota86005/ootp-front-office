@@ -37,12 +37,6 @@ public struct MainWindowView: View {
     }
 }
 
-/// The scenes' ids, shared by the app and the views that open them.
-public enum SceneID {
-    public static let main = "main"
-    public static let setup = "setup"
-}
-
 /// The split view: sidebar, the view, the inspector, and the toolbar.
 struct ShellSplitView: View {
     @Environment(AppModel.self) private var model
@@ -51,9 +45,12 @@ struct ShellSplitView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $window.sidebarVisibility) {
             SidebarView(window: window)
-                .navigationSplitViewColumnWidth(min: 200, ideal: SidebarView.idealWidth, max: 340)
+                .navigationSplitViewColumnWidth(
+                    min: SidebarView.minimumWidth, ideal: SidebarView.idealWidth, max: SidebarView.maximumWidth
+                )
         } detail: {
             DetailView(window: window)
+                .safeAreaInset(edge: .top, spacing: 0) { ImportRequestBanner() }
                 .navigationTitle(Text(window.descriptor?.title ?? "Pennant"))
                 .navigationSubtitle(ServedText.subtitle(dataStatus: model.dataStatus, status: model.status) ?? "")
                 .toolbar { WindowToolbar(window: window) }
@@ -118,6 +115,27 @@ struct DetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background)
         .accessibilityIdentifier("detail.\(window.route.department.rawValue).\(window.route.view)")
+    }
+}
+
+/// Why the import the GM asked for (Club ▸ Refresh Data, Import Now) did not start: the server's sentence, or the kind
+/// of failure, until it is dismissed or an import starts.
+struct ImportRequestBanner: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        if let problem = model.importRequestProblem {
+            HStack {
+                ProblemLine(problem)
+                Spacer()
+                Button("Dismiss") { model.dismissImportRequestProblem() }
+                    .controlSize(.small)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.bar)
+            .accessibilityIdentifier("banner.importProblem")
+        }
     }
 }
 

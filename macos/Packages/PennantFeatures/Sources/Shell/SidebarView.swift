@@ -9,8 +9,15 @@ public struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @Bindable var window: MainWindowModel
 
-    /// The sidebar column's ideal width.
-    public static let idealWidth: CGFloat = 240
+    /// The sidebar column's widths: wide enough that every view title in the registry fits at the default text size
+    /// (checked by `SidebarWidthTests`).
+    public static let minimumWidth: CGFloat = 270
+    public static let idealWidth: CGFloat = 280
+    public static let maximumWidth: CGFloat = 380
+    /// What a view row needs beside its title (the disclosure indent, the symbol and the margins), and the sidebar's row
+    /// text size at the default setting, both as macOS 26 draws them (measured from the snapshots).
+    public static let viewRowInset: CGFloat = 92
+    public static let rowTextSize: CGFloat = 15
 
     public init(window: MainWindowModel) {
         self.window = window
@@ -50,7 +57,8 @@ public struct SidebarView: View {
     }
 }
 
-/// The club card for the served current club: its served name and colours, and which club it is. A configured club
+/// The club card for the served current club: its served name and colours (unless the GM turned team colours off, the
+/// served `useTeamColors`), and which club it is. A configured club
 /// the club list does not have is named as not found; with no club served there is no card.
 struct SidebarClubCard: View {
     @Environment(AppModel.self) private var model
@@ -61,7 +69,12 @@ struct SidebarClubCard: View {
                 ClubCard(
                     name: org.label,
                     detail: club.source.label,
-                    tint: ClubTint(background: org.colors.bg, foreground: org.colors.fg, secondary: org.colors.secondary)
+                    tint: ClubTint(
+                        background: org.colors.bg,
+                        foreground: org.colors.fg,
+                        secondary: org.colors.secondary,
+                        useTeamColors: model.settings?.settings.useTeamColors ?? true
+                    )
                 )
             } else {
                 Label("Club not in this save", systemImage: "questionmark.circle")

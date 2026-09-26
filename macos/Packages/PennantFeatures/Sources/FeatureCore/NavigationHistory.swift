@@ -51,12 +51,23 @@ public nonisolated struct NavigationHistory: Codable, Hashable, Sendable {
 
     /// Drops every route `keep` rejects (a route a newer build saved), keeping `fallback` as the current route when the
     /// current one goes.
+    /// Routes that end up next to an equal one are collapsed, so Back and Forward always move somewhere.
     public func filtered(keeping keep: (AppRoute) -> Bool, fallback: AppRoute) -> NavigationHistory {
-        NavigationHistory(
-            current: keep(current) ? current : fallback,
-            back: back.filter(keep),
-            forward: forward.filter(keep)
+        let now = keep(current) ? current : fallback
+        let before = Self.collapsed(back.filter(keep))
+        let after = Self.collapsed(forward.filter(keep))
+        return NavigationHistory(
+            current: now,
+            back: before.last == now ? Array(before.dropLast()) : before,
+            forward: after.first == now ? Array(after.dropFirst()) : after
         )
+    }
+
+    /// Adjacent equal routes as one.
+    private static func collapsed(_ routes: [AppRoute]) -> [AppRoute] {
+        routes.reduce(into: []) { kept, route in
+            if kept.last != route { kept.append(route) }
+        }
     }
 
     // MARK: Scene restoration

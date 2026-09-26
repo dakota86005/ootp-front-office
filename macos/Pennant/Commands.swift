@@ -46,6 +46,7 @@ struct PennantCommands: Commands {
         }
 
         CommandMenu("Club") {
+            // A refusal (the server's sentence) or a failure is kept on the model and shown in every main window
             Button("Refresh Data") {
                 Task { await model.startImport() }
             }

@@ -23,16 +23,18 @@ nonisolated public enum PreviewFixtures {
         .bundled(in: .main, dataFolder: URL(fileURLWithPath: "/tmp/ootp-fo-test", isDirectory: true))
     }
 
-    /// The captured status; with `configured`, as if a save had been chosen and imported.
+    /// The suffix of the responses captured with a save chosen.
+    private static let chosen = "-configured"
+
+    /// The captured status: of the chosen save (`getStatus-configured`), or of a server with none.
     public static func status(configured: Bool) -> Components.Schemas.ServerStatus? {
-        guard var status = decode(Components.Schemas.ServerStatus.self, "getStatus") else { return nil }
-        if configured {
-            status.configured = true
-            status.saveName = "Test League"
-            status.csvDir = saves.first?.csvDir
-            status.csvDirExists = true
-        }
-        return status
+        decode(Components.Schemas.ServerStatus.self, "getStatus" + (configured ? Self.chosen : ""))
+    }
+
+    /// The captured data status, of the chosen save or of a server with none, so a preview never pairs one with the
+    /// other.
+    public static func dataStatus(configured: Bool) -> Components.Schemas.DataStatus? {
+        decode(Components.Schemas.DataStatus.self, "getDataStatus" + (configured ? Self.chosen : ""))
     }
 
     public static var saves: [Components.Schemas.SaveInfo] {
@@ -49,7 +51,11 @@ nonisolated public enum PreviewFixtures {
 
     /// A model with the server ready and the captured payloads.
     @MainActor
-    public static func ready(configured: Bool = true) -> AppModel {
+    public static func ready(
+        configured: Bool = true,
+        useTeamColors: Bool = true,
+        importRequestProblem: RequestProblem? = nil
+    ) -> AppModel {
         let status = status(configured: configured)
         let state: ServerState = status.map {
             .ready(ServerConnection(port: 5178, token: String(repeating: "p", count: 64), pid: 1, status: $0))
@@ -58,9 +64,14 @@ nonisolated public enum PreviewFixtures {
             configuration: configuration,
             state: state,
             status: status,
-            settings: decode(Components.Schemas.SettingsResponse.self, "getSettings"),
+            settings: decode(Components.Schemas.SettingsResponse.self, "getSettings").map {
+                var settings = $0
+                settings.settings.useTeamColors = useTeamColors
+                return settings
+            },
             orgs: orgs,
-            dataStatus: decode(Components.Schemas.DataStatus.self, "getDataStatus")
+            dataStatus: dataStatus(configured: configured),
+            importRequestProblem: importRequestProblem
         )
     }
 

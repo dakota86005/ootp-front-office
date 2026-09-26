@@ -69,6 +69,20 @@ struct NavigationHistoryTests {
         #expect(history.back.count == NavigationHistory.limit)
     }
 
+    @Test("dropping routes this build does not know never leaves the same route twice in a row")
+    func filteredCollapses() {
+        let unknown = AppRoute(department: "stadium", view: "seats")
+        // Back: morning, unknown, morning, lineup; current: unknown; forward: lineup, unknown, lineup, wire
+        var history = NavigationHistory(current: morning)
+        for route in [unknown, morning, lineup, unknown, lineup, unknown, lineup, wire] { history.go(to: route) }
+        for _ in 0..<4 { _ = history.goBack() }
+        #expect(history.current == unknown)
+        let kept = history.filtered(keeping: { $0.department != "stadium" }, fallback: lineup)
+        #expect(kept.back == [morning])
+        #expect(kept.current == lineup)
+        #expect(kept.forward == [wire])
+    }
+
     @Test("survives the round trip through scene storage")
     func roundTrip() throws {
         var history = NavigationHistory(current: morning)

@@ -81,16 +81,25 @@ struct SnapshotTests {
         ]
     }
 
-    nonisolated static let setupSteps: [String] = ["find-save", "find-save-problem", "importing", "import-failed", "pick-club"]
+    nonisolated static let setupSteps: [String] = [
+        "find-save", "find-save-problem", "find-save-unreachable", "importing", "import-failed", "import-interrupted",
+        "pick-club", "pick-club-failed",
+    ]
 
     static func setupModel(_ name: String) -> SetupModel {
         let saves = PreviewFixtures.saves
         let progress = Components.Schemas.ImportProgress(table: "players_career_batting_stats", fileIndex: 23, files: 71, rows: 184_220, phase: .init(value1: .writing))
         switch name {
         case "find-save-problem":
-            return .preview(step: .findSave, saves: [], locations: locations, folderProblem: "That folder is not an OOTP save, a folder of saves, or an export.")
+            return .preview(step: .findSave, saves: [], locations: locations, folderProblem: .served("That folder is not an OOTP save, a folder of saves, or an export."))
         case "importing":
             return .preview(step: .importing, chosen: saves.first, progress: progress)
+        case "find-save-unreachable":
+            return .preview(step: .findSave, loadProblem: .unreachable(detail: "URLError(.timedOut)"))
+        case "import-interrupted":
+            return .preview(step: .importing, chosen: saves.first, importProblem: .didNotFinish(since: "2040-07-01T12:00:00.000Z"))
+        case "pick-club-failed":
+            return .preview(step: .pickClub, clubProblem: .failed(detail: "HTTP 500"))
         case "import-failed":
             return .preview(step: .importing, chosen: saves.first, importProblem: .served("players.csv could not be read."))
         case "pick-club":
@@ -120,13 +129,34 @@ struct SnapshotTests {
             case .ai: AISettings(preloaded: PreviewFixtures.providers)
             }
         }
-        try draw(view.environment(model).environment(routing), size: SettingsView.size, dark: dark, name: "settings-\(tab.rawValue)", titled: true)
+        try draw(view.environment(model).environment(routing), size: CGSize(width: SettingsView.width, height: SettingsView.height(tab)), dark: dark, name: "settings-\(tab.rawValue)", titled: true)
     }
 
     @Test("General at full length, down to the data status", arguments: [false, true])
     func generalFull(dark: Bool) throws {
         let view = GeneralSettings().environment(PreviewFixtures.ready()).environment(AppRouting())
-        try draw(view, size: CGSize(width: SettingsView.size.width, height: 1500), dark: dark, name: "settings-general-full", titled: true)
+        try draw(view, size: CGSize(width: SettingsView.width, height: 1300), dark: dark, name: "settings-general-full", titled: true)
+    }
+
+    @Test("every department open in the sidebar: every view title fits", arguments: [false, true])
+    func sidebarAllOpen(dark: Bool) throws {
+        let model = PreviewFixtures.ready()
+        let window = MainWindowModel(registry: registry, expanded: Set(registry.departments.map(\.id)))
+        try draw(sidebarView(model: model, window: window), size: CGSize(width: SidebarView.idealWidth, height: 2000), dark: dark, name: "sidebar-all-departments")
+    }
+
+    @Test("the club card with team colours off: neutral", arguments: [false, true])
+    func neutralCard(dark: Bool) throws {
+        let model = PreviewFixtures.ready(useTeamColors: false)
+        let window = MainWindowModel(registry: registry)
+        try draw(sidebarView(model: model, window: window), size: CGSize(width: SidebarView.idealWidth, height: 300), dark: dark, name: "sidebar-club-card-neutral")
+    }
+
+    @Test("a main window showing why the import the GM asked for did not start", arguments: [false, true])
+    func importProblem(dark: Bool) throws {
+        let model = PreviewFixtures.ready(importRequestProblem: .served("CSV directory not found: /Users/gm/OOTP/Test League.lg/import_export/csv"))
+        let window = MainWindowModel(registry: registry)
+        try drawMainWindow(model: model, window: window, dark: dark, name: "main-window-import-problem")
     }
 
     // MARK: Drawing

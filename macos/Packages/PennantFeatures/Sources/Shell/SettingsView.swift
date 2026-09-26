@@ -4,14 +4,22 @@ import PennantKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Settings (SWIFTUI_REBUILD.md section 3.1): General (the save and data folder, importing, the data status, naming
-/// the save folder by hand, restoring the first-run backup), Appearance, and AI (each provider's key status, read
+/// Settings (SWIFTUI_REBUILD.md section 3.1): General (the OOTP save and its import, the club, the transaction log's
+/// save folder, the data status, the data folder and its backup), Appearance, and AI (each provider's key status, read
 /// only until N13). Updates arrive with N14. Every value shown is served; the labels are structural.
 public struct SettingsView: View {
     @Environment(AppRouting.self) private var routing
     @Environment(AppModel.self) private var model
 
-    public static let size = CGSize(width: 620, height: 640)
+    /// Each tab's size: the window takes the selected tab's.
+    public static let width: CGFloat = 620
+    public static func height(_ tab: AppRouting.SettingsTab) -> CGFloat {
+        switch tab {
+        case .general: 620
+        case .appearance: 200
+        case .ai: 460
+        }
+    }
 
     public init() {}
 
@@ -19,16 +27,15 @@ public struct SettingsView: View {
         @Bindable var routing = routing
         TabView(selection: $routing.settingsTab) {
             Tab("General", systemImage: "gearshape", value: AppRouting.SettingsTab.general) {
-                GeneralSettings()
+                GeneralSettings().frame(width: Self.width, height: Self.height(.general))
             }
             Tab("Appearance", systemImage: "circle.lefthalf.filled", value: AppRouting.SettingsTab.appearance) {
-                AppearanceSettings()
+                AppearanceSettings().frame(width: Self.width, height: Self.height(.appearance))
             }
             Tab("AI", systemImage: "sparkles", value: AppRouting.SettingsTab.ai) {
-                AISettings()
+                AISettings().frame(width: Self.width, height: Self.height(.ai))
             }
         }
-        .frame(width: Self.size.width, height: Self.size.height)
         .onChange(of: AppAppearance.served(model.settings), initial: true) { _, theme in
             AppAppearance.apply(theme)
         }
@@ -41,27 +48,29 @@ struct GeneralSettings: View {
     @Environment(AppModel.self) private var model
     @Environment(AppRouting.self) private var routing
     @Environment(\.openWindow) private var openWindow
-    @State private var importProblem: String?
     @State private var confirmingRestore = false
     @State private var restoreOutcome: RestoreOutcome?
+    @State private var clubProblem: RequestProblem?
     @State private var saveFolder = ""
-    @State private var saveFolderProblem: String?
+    @State private var saveFolderProblem: RequestProblem?
     @State private var choosingSaveFolder = false
 
     enum RestoreOutcome: Equatable {
         case restored(String)
-        case failed(String)
+        case failed(detail: String)
     }
+
+    private var can: CommandAvailability { .of(model, window: nil) }
 
     var body: some View {
         ScrollViewReader { proxy in
             Form {
                 saveSection
                 clubSection
-                dataFolderSection
-                saveFolderSection
+                transactionLogSection
                 DataStatusSection(dataStatus: model.dataStatus)
                     .id("dataStatus")
+                dataFolderSection
             }
             .formStyle(.grouped)
             .onChange(of: routing.revealDataStatus, initial: true) { _, reveal in
@@ -73,36 +82,43 @@ struct GeneralSettings: View {
         .accessibilityIdentifier("settings.general")
     }
 
+    /// The save Pennant imports: its name and export folder, the import, and the way to choose another.
     private var saveSection: some View {
-        Section("Save") {
-            LabeledContent("Save") {
+        Section {
+            LabeledContent("Name") {
                 if let name = model.status?.saveName { Text(verbatim: name) } else { Text("None chosen") }
             }
             if let folder = model.status?.csvDir {
-                LabeledContent("Export folder") {
+                LabeledContent("Export") {
                     Text(verbatim: folder).textSelection(.enabled).lineLimit(2).truncationMode(.middle)
                 }
             }
             if model.isImporting {
                 ImportProgressView(progress: model.importProgress)
             }
-            if let problem = importProblem ?? model.lastImportError {
-                Label { Text(verbatim: problem) } icon: { Image(systemName: "exclamationmark.triangle.fill") }
-                    .foregroundStyle(.red)
+            if let problem = model.importRequestProblem {
+                ProblemLine(problem)
+            } else if let error = model.lastImportError {
+                ProblemLine(Text(verbatim: error))
             }
             HStack {
                 Button("Choose Save…") {
                     routing.requestSetup()
                     openWindow(id: SceneID.setup)
                 }
-                .disabled(!model.isReady)
+                .disabled(!can.importExport)
                 Spacer()
                 Button("Import Now") {
-                    Task { importProblem = await model.startImport() }
+                    Task { await model.startImport() }
                 }
-                .disabled(!CommandAvailability.of(model, window: nil).refreshData)
+                .disabled(!can.refreshData)
                 .accessibilityIdentifier("settings.importNow")
             }
+        } header: {
+            Text("OOTP save")
+        } footer: {
+            Text("Pennant reads the save's export each time it imports.")
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -110,11 +126,18 @@ struct GeneralSettings: View {
     private var clubSection: some View {
         if !model.orgs.isEmpty {
             Section("Club") {
-                Picker("Club", selection: Binding(
+                Picker("Your club", selection: Binding(
                     get: { model.club?.ref.id },
                     set: { id in
                         guard let id else { return }
-                        Task { try? await model.saveSettings(.init(defaultOrgId: id)) }
+                        Task {
+                            do {
+                                try await model.saveSettings(.init(defaultOrgId: id))
+                                clubProblem = nil
+                            } catch {
+                                clubProblem = RequestProblem.from(error)
+                            }
+                        }
                     }
                 )) {
                     ForEach(model.orgs, id: \.teamId) { org in
@@ -122,14 +145,49 @@ struct GeneralSettings: View {
                     }
                 }
                 .accessibilityIdentifier("settings.club")
+                if let clubProblem { ProblemLine(clubProblem) }
             }
         }
     }
 
+    /// The save's own folder, where OOTP keeps the transaction log: found from the export, or named here by hand.
+    private var transactionLogSection: some View {
+        Section {
+            TextField("Save folder", text: $saveFolder, prompt: Text("The save's folder, ending in .lg"))
+                .labelsHidden()
+                .accessibilityIdentifier("settings.saveFolder")
+            HStack {
+                Button("Choose…") { choosingSaveFolder = true }
+                Button("Find Automatically") { Task { await setSaveFolder("") } }
+                    .disabled(!model.isReady)
+                Spacer()
+                Button("Use This Folder") { Task { await setSaveFolder(saveFolder) } }
+                    .disabled(saveFolder.trimmingCharacters(in: .whitespaces).isEmpty || !model.isReady)
+            }
+            if let saveFolderProblem { ProblemLine(saveFolderProblem) }
+        } header: {
+            Text("Transaction log")
+        } footer: {
+            Text("Pennant reads the transaction log from the save's folder, which it finds from the export. Name the folder here only if it isn't found.")
+                .foregroundStyle(.secondary)
+        }
+        .fileImporter(isPresented: $choosingSaveFolder, allowedContentTypes: [.folder]) { result in
+            if case .success(let url) = result { saveFolder = url.path(percentEncoded: false) }
+        }
+    }
+
+    /// Where Pennant keeps its own data, and the backup it took before it first ran there.
     private var dataFolderSection: some View {
         Section("Data folder") {
-            LabeledContent("Data folder") {
+            LabeledContent("Location") {
                 Text(verbatim: model.dataFolderPath).textSelection(.enabled).lineLimit(2).truncationMode(.middle)
+            }
+            LabeledContent("Backup taken") {
+                if let record = model.backups.record() {
+                    Text(record.createdAt, format: .dateTime.year().month().day().hour().minute())
+                } else {
+                    Text("None yet")
+                }
             }
             HStack {
                 Button("Show in Finder") {
@@ -137,23 +195,16 @@ struct GeneralSettings: View {
                 }
                 Spacer()
                 Button("Restore Backup…") { confirmingRestore = true }
-                    .disabled(model.backups.record() == nil)
+                    .disabled(model.backups.record() == nil || model.isImporting)
                     .accessibilityIdentifier("settings.restoreBackup")
-            }
-            if let record = model.backups.record() {
-                LabeledContent("Backup taken") {
-                    Text(record.createdAt, format: .dateTime.year().month().day().hour().minute())
-                }
-            } else {
-                LabeledContent("Backup taken") { Text("None yet") }
             }
             if let restoreOutcome {
                 switch restoreOutcome {
                 case .restored(let folder):
                     LabeledContent("Replaced files kept in") { Text(verbatim: folder).textSelection(.enabled) }
-                case .failed(let reason):
-                    Label { Text(verbatim: reason) } icon: { Image(systemName: "exclamationmark.triangle.fill") }
-                        .foregroundStyle(.red)
+                case .failed(let detail):
+                    ProblemLine(Text("The backup could not be restored"))
+                        .help(detail: detail)
                 }
             }
         }
@@ -164,7 +215,8 @@ struct GeneralSettings: View {
                         let aside = try await model.restoreBackup()
                         restoreOutcome = .restored(aside.path(percentEncoded: false))
                     } catch {
-                        restoreOutcome = .failed(String(describing: error))
+                        model.logProblem("could not restore the backup: \(error)")
+                        restoreOutcome = .failed(detail: String(describing: error))
                     }
                 }
             }
@@ -173,46 +225,26 @@ struct GeneralSettings: View {
         }
     }
 
-    private var saveFolderSection: some View {
-        Section {
-            HStack {
-                TextField("Save folder", text: $saveFolder, prompt: Text(verbatim: "…/Your Save.lg"))
-                    .accessibilityIdentifier("settings.saveFolder")
-                Button("Choose…") { choosingSaveFolder = true }
-            }
-            HStack {
-                Button("Find Automatically") { Task { await setSaveFolder("") } }
-                Spacer()
-                Button("Use This Folder") { Task { await setSaveFolder(saveFolder) } }
-                    .disabled(saveFolder.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            if let saveFolderProblem {
-                Label { Text(verbatim: saveFolderProblem) } icon: { Image(systemName: "exclamationmark.triangle.fill") }
-                    .foregroundStyle(.red)
-            }
-        } header: {
-            Text("Save folder")
-        }
-        .fileImporter(isPresented: $choosingSaveFolder, allowedContentTypes: [.folder]) { result in
-            if case .success(let url) = result { saveFolder = url.path(percentEncoded: false) }
-        }
-    }
-
     /// `POST /api/save-source`: the save's `.lg` folder named by hand; empty returns to finding it automatically.
     private func setSaveFolder(_ path: String) async {
-        guard let client = model.client else { return }
+        guard let client = model.client else {
+            saveFolderProblem = .notRunning
+            return
+        }
         saveFolderProblem = nil
         do {
             switch try await client.setSaveSource(body: .json(.init(lgPath: path.trimmingCharacters(in: .whitespaces)))) {
             case .ok:
                 await model.reloadAll()
             case .badRequest(let refused):
-                saveFolderProblem = try refused.body.json.error
+                saveFolderProblem = .served(try refused.body.json.error)
             case .undocumented(let code, _):
-                saveFolderProblem = "HTTP \(code)"
+                saveFolderProblem = .undocumented(code, operation: "setSaveSource")
             }
         } catch {
-            saveFolderProblem = String(describing: error)
+            let problem = RequestProblem.from(error)
+            if let detail = problem.detail { model.logProblem("could not set the save folder: \(detail)") }
+            saveFolderProblem = problem
         }
     }
 }
@@ -239,7 +271,6 @@ struct DataStatusSection: View {
                 row("Save through", status.save.simulatedThrough)
                 row("Exported", ServedText.timestamp(status.csv.exportedAt))
                 row("Imported", ServedText.timestamp(status.csv.importedAt))
-                row("Save", status.save.name)
                 row("Save folder", status.save.lgPath)
                 if !status.save.discoveryNotes.isEmpty {
                     lines(status.save.discoveryNotes).font(.callout)
@@ -274,9 +305,10 @@ struct DataStatusSection: View {
 
 // MARK: Appearance
 
+/// System, Light or Dark: the served `theme`, applied to every window once the server has saved it.
 struct AppearanceSettings: View {
     @Environment(AppModel.self) private var model
-    @State private var problem: String?
+    @State private var problem: RequestProblem?
 
     var body: some View {
         Form {
@@ -284,13 +316,13 @@ struct AppearanceSettings: View {
                 Picker("Appearance", selection: Binding(
                     get: { AppAppearance.served(model.settings) ?? "system" },
                     set: { theme in
-                        AppAppearance.apply(theme)
                         Task {
                             do {
-                                try await model.saveSettings(.init(theme: .init(value1: .init(rawValue: theme))))
+                                try await model.saveSettings(.init(theme: .init(value1: .init(rawValue: theme), value2: theme)))
                                 problem = nil
+                                AppAppearance.apply(AppAppearance.served(model.settings))
                             } catch {
-                                problem = String(describing: error)
+                                problem = RequestProblem.from(error)
                             }
                         }
                     }
@@ -302,9 +334,7 @@ struct AppearanceSettings: View {
                 .pickerStyle(.radioGroup)
                 .disabled(model.settings == nil)
                 .accessibilityIdentifier("settings.appearance")
-                if let problem {
-                    Text(verbatim: problem).foregroundStyle(.red)
-                }
+                if let problem { ProblemLine(problem) }
             }
         }
         .formStyle(.grouped)
@@ -318,6 +348,8 @@ struct AppearanceSettings: View {
 struct AISettings: View {
     @Environment(AppModel.self) private var model
     @State private var providers: Components.Schemas.ProvidersResponse?
+    @State private var problem: RequestProblem?
+    @State private var attempt = 0
     private let preloaded: Components.Schemas.ProvidersResponse?
 
     init(preloaded: Components.Schemas.ProvidersResponse? = nil) {
@@ -340,16 +372,39 @@ struct AISettings: View {
                     Text("Adding or changing a key arrives in a later build")
                         .foregroundStyle(.secondary)
                 }
+            } else if let problem {
+                Section("Providers") {
+                    ProblemLine(problem)
+                    Button("Try Again") { attempt += 1 }
+                }
             } else {
                 ProgressView()
             }
         }
         .formStyle(.grouped)
-        .task(id: model.storeKey) {
-            guard preloaded == nil, let client = model.client else { return }
-            providers = try? await client.getProviders().ok.body.json
-        }
+        .task(id: TaskKey(store: model.storeKey, attempt: attempt)) { await load() }
         .accessibilityIdentifier("settings.ai")
+    }
+
+    private struct TaskKey: Hashable {
+        var store: AppModel.StoreKey?
+        var attempt: Int
+    }
+
+    private func load() async {
+        guard preloaded == nil else { return }
+        guard let client = model.client else {
+            problem = .notRunning
+            return
+        }
+        do {
+            providers = try await client.getProviders().ok.body.json
+            problem = nil
+        } catch {
+            let failure = RequestProblem.from(error)
+            if let detail = failure.detail { model.logProblem("could not read the AI providers: \(detail)") }
+            problem = failure
+        }
     }
 }
 
