@@ -90,6 +90,9 @@ rsync -a \
   new (require(require.resolve('better-sqlite3', { paths: [root] })))(':memory:');
 " || { echo "[stage] error: the staged node_modules is incomplete" >&2; exit 1; }
 
+# The stamp the build checks the stage against (embed-server.sh)
+"$ROOT/macos/scripts/stage-stamp.sh" "$ROOT" > "$STAGE/.stamp"
+
 version="$("$NODE" -p "require('$STAGE/Resources/server/package.json').version")"
 size="$(du -sh "$STAGE" | cut -f1)"
 echo "[stage] staged the server for version $version ($size) in build/macos-server/"

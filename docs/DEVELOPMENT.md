@@ -250,7 +250,10 @@ The Xcode project is `macos/Pennant.xcodeproj` (scheme `Pennant`), over the loca
 npm run mac:stage
 ```
 
-The build copies `build/macos-server/` into the app and stops, naming that command, when it is missing or stale. A Debug
+The build copies `build/macos-server/` into the app and stops, naming that command, when the stage is missing, holds
+another version, was made from a different `build/sidecar/` bundle, `package-lock.json` or Node (a content stamp,
+`macos/scripts/stage-stamp.sh`), or when any `server/**/*.ts` is newer than the bundle. After changing the server, run
+`npm run mac:stage` again. A Debug
 build signs with the Apple Development identity on team `6T7RV2A4DQ` if the Mac has it; to build without signing, pass
 `CODE_SIGNING_ALLOWED=NO`, and to build without the server (as CI does), `PENNANT_SKIP_SERVER=YES`.
 

@@ -427,7 +427,9 @@ A stable Developer ID signature means these prompts and Keychain prompts appear 
   intermediates, type declarations, source maps and READMEs. About 150 MB, 116 MB of it Node.
 - The Pennant target's last phase, "Embed the server" (`macos/scripts/embed-server.sh`), sets `CFBundleShortVersionString`
   and `CFBundleVersion` from `package.json` (the one place the version lives), copies the stage into the bundle, and
-  fails naming `npm ci && npm run mac:stage` when the stage is missing or holds another version. A build that signs
+  fails naming `npm ci && npm run mac:stage` when the stage is missing or stale: another version, a server source newer
+  than its bundle, or a content stamp (`macos/scripts/stage-stamp.sh`: `build/sidecar/`, `package-lock.json`, the Node
+  version) that differs from the stage's. A build that signs
   signs inside out: each `.node`, then the Node binary with the hardened runtime and only `allow-jit` and
   `allow-unsigned-executable-memory` (`macos/Support/pennant-server.entitlements`); Xcode signs the app last.
   `PENNANT_SKIP_SERVER=YES` builds an app without a server (CI); it starts and says the server is missing.

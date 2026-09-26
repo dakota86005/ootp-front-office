@@ -2,7 +2,9 @@
 # The Pennant target's "Embed the server" build phase (SWIFTUI_REBUILD.md section 5.2). It:
 #   1. sets the app's version from package.json, the one place the version lives;
 #   2. copies the staged server (npm run mac:stage → build/macos-server/) into Contents/Helpers and
-#      Contents/Resources/server, failing with the commands to run when it is not staged;
+#      Contents/Resources/server, failing with the command to run when it is missing or stale: another version, a
+#      server source newer than its bundle, or a stage whose content stamp (stage-stamp.sh: build/sidecar/,
+#      package-lock.json, the Node version) differs from the current inputs;
 #   3. when the build signs, signs the server's native code inside out: each .node, then the Node binary with
 #      the hardened runtime and only V8's two entitlements. Xcode signs the app itself last.
 #
@@ -36,6 +38,17 @@ fi
 STAGED_VERSION="$(/usr/bin/plutil -extract version raw -o - "${STAGE}/Resources/server/package.json")"
 if [ "${STAGED_VERSION}" != "${VERSION}" ]; then
   echo "error: The staged server is version ${STAGED_VERSION} but package.json says ${VERSION}. Run: npm run mac:stage"
+  exit 1
+fi
+# Stale: the server source is newer than its bundle, or the stage was not made from the current bundle, lockfile
+# and Node (a content stamp, stage-stamp.sh)
+if [ -n "$(find "${REPO}/server" -name '*.ts' -newer "${REPO}/build/sidecar/server.cjs" -print -quit 2>/dev/null)" ]; then
+  echo "error: The server's source has changed since it was bundled for the app. Run: npm run mac:stage"
+  exit 1
+fi
+EXPECTED_STAMP="$("${SRCROOT}/scripts/stage-stamp.sh" "${REPO}" 2>/dev/null || true)"
+if [ ! -f "${STAGE}/.stamp" ] || [ -z "${EXPECTED_STAMP}" ] || [ "$(cat "${STAGE}/.stamp")" != "${EXPECTED_STAMP}" ]; then
+  echo "error: The staged server does not match build/sidecar/, package-lock.json and the pinned Node. Run: npm run mac:stage"
   exit 1
 fi
 
