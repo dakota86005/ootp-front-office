@@ -1,17 +1,38 @@
 import PennantKit
+import Shell
 import SwiftUI
 
-/// Pennant for Mac (D-055): the scenes. At N3 the main window shows the server's state; the window shell (sidebar,
-/// toolbar, inspector, commands), Setup and Settings arrive in the next stage.
+/// Pennant for Mac (D-055): the scenes (SWIFTUI_REBUILD.md section 3.1). Main windows (several allowed), the Setup
+/// window (opened by itself when the server has no save, and from Club ▸ Import Export…), and Settings. The menu bar's
+/// commands are `PennantCommands`.
 @main
 struct PennantApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        WindowGroup(id: "main") {
-            RootView()
+        WindowGroup(id: SceneID.main) {
+            MainWindowScene()
                 .environment(appDelegate.model)
-                .frame(minWidth: 720, minHeight: 480)
+                .environment(appDelegate.routing)
+        }
+        .defaultSize(width: 1280, height: 800)
+        .commands {
+            PennantCommands(model: appDelegate.model, routing: appDelegate.routing, registry: AppRegistry.shared)
+        }
+
+        Window("Set Up Pennant", id: SceneID.setup) {
+            SetupScene()
+                .environment(appDelegate.model)
+                .environment(appDelegate.routing)
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+        .restorationBehavior(.disabled)
+
+        Settings {
+            SettingsView()
+                .environment(appDelegate.model)
+                .environment(appDelegate.routing)
         }
     }
 }
@@ -19,6 +40,8 @@ struct PennantApp: App {
 /// Owns the app's model, starts the server when the app launches, and stops it cleanly before the app quits.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model: AppModel
+    /// What the windows ask of each other (the Setup step, the Settings tab).
+    let routing = AppRouting()
     private let quit: QuitCoordinator
     private var terminationSignal: (any DispatchSourceSignal)?
 

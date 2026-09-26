@@ -10,6 +10,7 @@
 		4E5000000000000000000080 /* PennantKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5000000000000000000070 /* PennantKit */; };
 		4E5000000000000000000081 /* PennantDesign in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5000000000000000000071 /* PennantDesign */; };
 		4E5000000000000000000082 /* PennantAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5000000000000000000072 /* PennantAPI */; };
+		4E5000000000000000000083 /* PennantFeatures in Frameworks */ = {isa = PBXBuildFile; productRef = 4E5000000000000000000073 /* PennantFeatures */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +59,7 @@
 				4E5000000000000000000080 /* PennantKit in Frameworks */,
 				4E5000000000000000000081 /* PennantDesign in Frameworks */,
 				4E5000000000000000000082 /* PennantAPI in Frameworks */,
+				4E5000000000000000000083 /* PennantFeatures in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -115,6 +117,7 @@
 				4E5000000000000000000070 /* PennantKit */,
 				4E5000000000000000000071 /* PennantDesign */,
 				4E5000000000000000000072 /* PennantAPI */,
+				4E5000000000000000000073 /* PennantFeatures */,
 			);
 			productName = Pennant;
 			productReference = 4E5000000000000000000010 /* Pennant.app */;
@@ -175,6 +178,7 @@
 				4E5000000000000000000060 /* XCLocalSwiftPackageReference "Packages/PennantKit" */,
 				4E5000000000000000000061 /* XCLocalSwiftPackageReference "Packages/PennantDesign" */,
 				4E5000000000000000000062 /* XCLocalSwiftPackageReference "Packages/PennantAPI" */,
+				4E5000000000000000000063 /* XCLocalSwiftPackageReference "Packages/PennantFeatures" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4E5000000000000000000003 /* Products */;
@@ -507,6 +511,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/PennantAPI;
 		};
+		4E5000000000000000000063 /* XCLocalSwiftPackageReference "Packages/PennantFeatures" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/PennantFeatures;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -524,6 +532,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 4E5000000000000000000062 /* XCLocalSwiftPackageReference "Packages/PennantAPI" */;
 			productName = PennantAPI;
+		};
+		4E5000000000000000000073 /* PennantFeatures */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4E5000000000000000000063 /* XCLocalSwiftPackageReference "Packages/PennantFeatures" */;
+			productName = PennantFeatures;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

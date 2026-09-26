@@ -1,25 +1,396 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "40-Man & Options": {
+      "extractionState": "manual"
+    },
+    "AI": {
+      "extractionState": "manual"
+    },
+    "Adding or changing a key arrives in a later build": {
+      "extractionState": "manual"
+    },
+    "Affiliates": {
+      "extractionState": "manual"
+    },
+    "Appearance": {
+      "extractionState": "manual"
+    },
+    "Arrives in a later build": {
+      "extractionState": "manual"
+    },
+    "Ask Staff": {
+      "extractionState": "manual"
+    },
+    "Ask Staff arrives in a later build": {
+      "extractionState": "manual"
+    },
+    "Assignments": {
+      "extractionState": "manual"
+    },
+    "Back": {
+      "extractionState": "manual"
+    },
+    "Backup taken": {
+      "extractionState": "manual"
+    },
+    "Bench & Backups": {
+      "extractionState": "manual"
+    },
+    "Choose Another Save": {
+      "extractionState": "manual"
+    },
+    "Choose Save…": {
+      "extractionState": "manual"
+    },
+    "Choose…": {
+      "extractionState": "manual"
+    },
+    "Chosen in Settings": {
+      "extractionState": "manual"
+    },
     "Club": {},
+    "Club Reports": {
+      "extractionState": "manual"
+    },
+    "Club not in this save": {
+      "extractionState": "manual"
+    },
+    "Coaching Staff": {
+      "extractionState": "manual"
+    },
+    "Contracts": {
+      "extractionState": "manual"
+    },
+    "Dark": {
+      "extractionState": "manual"
+    },
+    "Data Status": {
+      "extractionState": "manual"
+    },
     "Data folder": {},
+    "Data status": {
+      "extractionState": "manual"
+    },
+    "Decision": {
+      "extractionState": "manual"
+    },
+    "Depth Chart": {
+      "extractionState": "manual"
+    },
+    "Development Tracking": {
+      "extractionState": "manual"
+    },
+    "Draft Board": {
+      "extractionState": "manual"
+    },
+    "Evidence": {
+      "extractionState": "manual"
+    },
+    "Export files": {
+      "extractionState": "manual"
+    },
+    "Export folder": {
+      "extractionState": "manual"
+    },
+    "Exported": {
+      "extractionState": "manual"
+    },
+    "Farm & Development": {
+      "extractionState": "manual"
+    },
+    "Finance": {
+      "extractionState": "manual"
+    },
+    "Find Automatically": {
+      "extractionState": "manual"
+    },
+    "Find the Save": {
+      "extractionState": "manual"
+    },
+    "Folder": {
+      "extractionState": "manual"
+    },
+    "Forward": {
+      "extractionState": "manual"
+    },
+    "Found": {
+      "extractionState": "manual"
+    },
+    "Franchise History": {
+      "extractionState": "manual"
+    },
+    "Free Agents": {
+      "extractionState": "manual"
+    },
+    "From the Keychain": {
+      "extractionState": "manual"
+    },
+    "From the environment": {
+      "extractionState": "manual"
+    },
+    "Front Office": {
+      "extractionState": "manual"
+    },
+    "GM Briefing": {
+      "extractionState": "manual"
+    },
+    "Game date": {
+      "extractionState": "manual"
+    },
+    "General": {
+      "extractionState": "manual"
+    },
+    "Go": {
+      "extractionState": "manual"
+    },
+    "Hide Inspector": {
+      "extractionState": "manual"
+    },
+    "Horizon Board": {
+      "extractionState": "manual"
+    },
     "Import": {},
+    "Import Export…": {
+      "extractionState": "manual"
+    },
+    "Import Now": {
+      "extractionState": "manual"
+    },
+    "Imported": {
+      "extractionState": "manual"
+    },
+    "Imported data through": {
+      "extractionState": "manual"
+    },
+    "Importing the export": {
+      "extractionState": "manual"
+    },
+    "Importing…": {
+      "extractionState": "manual"
+    },
+    "In use": {
+      "extractionState": "manual"
+    },
+    "Injury Report": {
+      "extractionState": "manual"
+    },
+    "Inspector": {
+      "extractionState": "manual"
+    },
+    "Leaders": {
+      "extractionState": "manual"
+    },
+    "League Office": {
+      "extractionState": "manual"
+    },
+    "Light": {
+      "extractionState": "manual"
+    },
+    "Lineup": {
+      "extractionState": "manual"
+    },
+    "Major League Ops": {
+      "extractionState": "manual"
+    },
+    "Managed by you in this save": {
+      "extractionState": "manual"
+    },
+    "Medical": {
+      "extractionState": "manual"
+    },
+    "Morning Report": {
+      "extractionState": "manual"
+    },
     "No data folder chosen for this development build": {},
+    "No key": {
+      "extractionState": "manual"
+    },
+    "No key needed": {
+      "extractionState": "manual"
+    },
+    "No save chosen": {
+      "extractionState": "manual"
+    },
+    "None chosen": {
+      "extractionState": "manual"
+    },
+    "None found": {
+      "extractionState": "manual"
+    },
+    "None yet": {
+      "extractionState": "manual"
+    },
+    "Not found": {
+      "extractionState": "manual"
+    },
+    "Nothing selected": {
+      "extractionState": "manual"
+    },
+    "Or choose a folder": {
+      "extractionState": "manual"
+    },
+    "Org Comparison": {
+      "extractionState": "manual"
+    },
+    "Organization": {
+      "extractionState": "manual"
+    },
+    "Organizational Philosophy": {
+      "extractionState": "manual"
+    },
+    "Payroll & Budget": {
+      "extractionState": "manual"
+    },
+    "Pennant": {
+      "extractionState": "manual"
+    },
+    "Pennant stops its server, puts back the files it copied before it first ran on this folder, and starts again. The files it replaces are kept in the backups folder.": {
+      "extractionState": "manual"
+    },
+    "Philosophy & Staff": {
+      "extractionState": "manual"
+    },
+    "Pick the Club": {
+      "extractionState": "manual"
+    },
+    "Pitching Availability": {
+      "extractionState": "manual"
+    },
+    "Pitching Staff": {
+      "extractionState": "manual"
+    },
+    "Player Search": {
+      "extractionState": "manual"
+    },
+    "Position Players": {
+      "extractionState": "manual"
+    },
+    "Prospects": {
+      "extractionState": "manual"
+    },
+    "Providers": {
+      "extractionState": "manual"
+    },
+    "Refresh Data": {
+      "extractionState": "manual"
+    },
+    "Replaced files kept in": {
+      "extractionState": "manual"
+    },
+    "Report": {
+      "extractionState": "manual"
+    },
     "Restarting…": {},
+    "Restore Backup": {
+      "extractionState": "manual"
+    },
+    "Restore Backup…": {
+      "extractionState": "manual"
+    },
+    "Restore the backup?": {
+      "extractionState": "manual"
+    },
+    "Rosters": {
+      "extractionState": "manual"
+    },
     "Save": {},
+    "Save Club": {
+      "extractionState": "manual"
+    },
+    "Save folder": {
+      "extractionState": "manual"
+    },
+    "Save through": {
+      "extractionState": "manual"
+    },
+    "Saved in the data folder": {
+      "extractionState": "manual"
+    },
+    "Saves Pennant found": {
+      "extractionState": "manual"
+    },
+    "Schedule & Game Plans": {
+      "extractionState": "manual"
+    },
+    "Scouting": {
+      "extractionState": "manual"
+    },
+    "Search": {
+      "extractionState": "manual"
+    },
+    "Season Trends": {
+      "extractionState": "manual"
+    },
+    "Server Log": {
+      "extractionState": "manual"
+    },
     "Set PENNANT_DEV_DATA_DIR (or -PennantDevDataFolder) to a scratch folder, or choose the real folder on purpose with PENNANT_DEV_USE_REAL_DATA=1 (or -PennantUseRealDataFolder YES).": {},
+    "Set Up Pennant": {
+      "extractionState": "manual"
+    },
+    "Set Up Pennant…": {
+      "extractionState": "manual"
+    },
+    "Show Inspector": {
+      "extractionState": "manual"
+    },
     "Show Log": {},
+    "Show in Finder": {
+      "extractionState": "manual"
+    },
+    "Standings": {
+      "extractionState": "manual"
+    },
     "Starting…": {},
     "Stopping…": {},
+    "Storylines": {
+      "extractionState": "manual"
+    },
+    "System": {
+      "extractionState": "manual"
+    },
     "The data folder could not be backed up": {},
     "The data folder is in use": {},
+    "The import did not start": {
+      "extractionState": "manual"
+    },
     "The server could not be started": {},
     "The server did not answer": {},
     "The server did not start in time": {},
     "The server is missing from this build": {},
     "The server keeps stopping": {},
+    "Trade Desk": {
+      "extractionState": "manual"
+    },
+    "Trades": {
+      "extractionState": "manual"
+    },
+    "Transaction log": {
+      "extractionState": "manual"
+    },
     "Try Again": {},
-    "Version": {}
+    "Us vs Them": {
+      "extractionState": "manual"
+    },
+    "Use This Folder": {
+      "extractionState": "manual"
+    },
+    "Use This Save": {
+      "extractionState": "manual"
+    },
+    "Where Pennant looked": {
+      "extractionState": "manual"
+    },
+    "Wire": {
+      "extractionState": "manual"
+    },
+    "Your club": {
+      "extractionState": "manual"
+    },
+    "circle": {
+      "extractionState": "manual"
+    }
   },
   "version": "1.0"
 }
