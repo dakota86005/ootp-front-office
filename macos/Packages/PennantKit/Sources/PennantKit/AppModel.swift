@@ -31,10 +31,9 @@ public final class AppModel {
     public private(set) var eventStreamConnected = false
     /// Events of a known type that did not decode, reported for the log (each also re-read `/api/status`).
     public private(set) var eventProblems: [EventProblem] = []
-    /// What the first-run backup did on this start.
+    /// What the first-run backup did on the latest launch (the controller takes it before every launch; a failure
+    /// is the server state `.failed(.backupFailed)`).
     public private(set) var backupOutcome: BackupManager.Outcome?
-    /// A reason the first-run backup failed (the server starts anyway: nothing was changed).
-    public private(set) var backupError: String?
     /// The last request that failed, for the log.
     public private(set) var lastRequestError: String?
     /// The client for the running server; nil while it is not ready.
@@ -50,6 +49,7 @@ public final class AppModel {
     private var stateTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
     private var started = false
+    private var shuttingDown = false
 
     public init(
         configuration: ServerConfiguration,
@@ -57,8 +57,9 @@ public final class AppModel {
         makeClient: @escaping @Sendable (ServerConnection) -> Client = { PennantClient.make(port: $0.port, token: $0.token) }
     ) {
         self.configuration = configuration
-        self.backups = BackupManager(dataFolder: configuration.dataFolder)
-        self.controller = controller ?? ServerController(configuration: configuration)
+        let controller = controller ?? ServerController(configuration: configuration)
+        self.controller = controller
+        self.backups = controller.backups
         self.makeClient = makeClient
     }
 
@@ -99,29 +100,31 @@ public final class AppModel {
 
     // MARK: Life
 
-    /// Takes the first-run backup, then starts the server and follows it. Safe to call more than once.
+    /// Starts the server and follows it. The controller takes the first-run backup before every launch. Safe to
+    /// call more than once; does nothing once a shutdown has begun.
     public func start() async {
-        guard !started else { return }
+        guard !started, !shuttingDown else { return }
         started = true
-        takeFirstRunBackup()
         let updates = await controller.stateUpdates()
         stateTask = Task { [weak self] in
             for await state in updates {
                 guard let self else { return }
                 self.apply(state)
+                self.backupOutcome = await self.controller.backupOutcome
             }
         }
         await controller.start()
     }
 
-    /// Try Again after a failure or a locked data folder.
+    /// Try Again after a failure or a locked data folder (the backup is retried first, by the controller).
     public func tryAgain() async {
-        if case .idle = serverState { takeFirstRunBackup() }
+        guard !shuttingDown else { return }
         await controller.tryAgain()
     }
 
-    /// Stops the server cleanly (the app's quit waits for this).
+    /// Stops the server cleanly (the app's quit waits for this). Nothing starts a server afterwards.
     public func shutdown() async {
+        shuttingDown = true
         eventTask?.cancel()
         eventTask = nil
         await controller.stop()
@@ -142,20 +145,6 @@ public final class AppModel {
         } catch {
             await controller.start()
             throw error
-        }
-    }
-
-    private func takeFirstRunBackup() {
-        do {
-            backupOutcome = try backups.backUpIfFirstRun()
-            backupError = nil
-            if case .backedUp(let record) = backupOutcome {
-                let what = record.files.isEmpty ? "nothing (none of the files exist yet)" : record.files.joined(separator: ", ")
-                controller.log.write("first-run backup: \(what) to backups/\(record.folder)", source: "app")
-            }
-        } catch {
-            backupError = String(describing: error)
-            controller.log.write("the first-run backup failed: \(error)", source: "app")
         }
     }
 

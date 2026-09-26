@@ -120,6 +120,7 @@ struct AppModelTests {
         try FileManager.default.createDirectory(at: model.configuration.dataFolder, withIntermediateDirectories: true)
         try Data("{}".utf8).write(to: model.configuration.dataFolder.appending(path: "settings.json"))
         await model.start()
+        #expect(await eventually { model.backupOutcome != nil })
         guard case .backedUp(let record) = model.backupOutcome else {
             Issue.record("no backup: \(String(describing: model.backupOutcome))")
             return
@@ -132,7 +133,7 @@ struct AppModelTests {
             keySource: NoKeys(), probe: { _, _ in status }, timing: fastTiming
         ))
         await again.start()
-        #expect(again.backupOutcome == .alreadyDone(record))
+        #expect(await eventually { again.backupOutcome == .alreadyDone(record) })
         await again.shutdown()
     }
 }

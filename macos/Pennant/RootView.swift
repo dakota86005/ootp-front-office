@@ -42,6 +42,7 @@ extension ServerFailure.Kind {
         case .notReady: "The server did not start in time"
         case .statusCheck: "The server did not answer"
         case .crashedRepeatedly: "The server keeps stopping"
+        case .backupFailed: "The data folder could not be backed up"
         }
     }
 }

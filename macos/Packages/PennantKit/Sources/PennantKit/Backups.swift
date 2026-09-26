@@ -8,8 +8,9 @@ import Foundation
 ///
 /// `history.db` is kept in SQLite's write-ahead log mode, so its `-wal` and `-shm` files are copied with it: with no
 /// server running, the three together are a consistent database. A folder whose lock is held by a running server
-/// (the Electron app) is not backed up then; the server refuses to start there anyway, and the backup happens on
-/// the next start. `backups/pre-swiftui.json` records that it was done, so it happens once per folder.
+/// (the Electron app) is not backed up then, and no server is started on it (`ServerController` gates every launch,
+/// Try Again included, on this backup being done or recorded). `backups/pre-swiftui.json` records that it was done,
+/// so it happens once per folder. A backup that fails partway is removed, and no server starts.
 public struct BackupManager: Sendable {
     public let dataFolder: URL
 
@@ -66,18 +67,26 @@ public struct BackupManager: Sendable {
 
         let destination = uniqueFolder(named: "pre-swiftui-\(Self.dayStamp(now))")
         try manager.createDirectory(at: destination, withIntermediateDirectories: true)
-        var copied: [String] = []
-        for name in Self.filesWithCompanions() where manager.fileExists(atPath: dataFolder.appending(path: name).path) {
-            try manager.copyItem(at: dataFolder.appending(path: name), to: destination.appending(path: name))
-            copied.append(name)
+        let record: Record
+        do {
+            var copied: [String] = []
+            for name in Self.filesWithCompanions() where manager.fileExists(atPath: dataFolder.appending(path: name).path) {
+                try manager.copyItem(at: dataFolder.appending(path: name), to: destination.appending(path: name))
+                copied.append(name)
+            }
+            // Whole seconds, as the record file stores it
+            let createdAt = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
+            record = Record(folder: destination.lastPathComponent, createdAt: createdAt, files: copied)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            try encoder.encode(record).write(to: recordFile, options: .atomic)
+        } catch {
+            // A partial copy is not a backup: remove it, so the next attempt starts clean and nothing half-made
+            // is ever taken for the real thing
+            try? manager.removeItem(at: destination)
+            throw error
         }
-        // Whole seconds, as the record file stores it
-        let createdAt = Date(timeIntervalSince1970: now.timeIntervalSince1970.rounded(.down))
-        let record = Record(folder: destination.lastPathComponent, createdAt: createdAt, files: copied)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(record).write(to: recordFile, options: .atomic)
         return .backedUp(record)
     }
 

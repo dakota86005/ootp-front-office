@@ -1,4 +1,5 @@
 import Foundation
+import PennantAPI
 import Testing
 @testable import PennantKit
 
@@ -167,5 +168,133 @@ struct ServedFormatTests {
         #expect(ServedFormat.share(1, of: 0, locale: us) == nil)
         #expect(ServedFormat.share(nil, of: 10, locale: us) == nil)
         #expect(ServedFormat.share(3, of: nil, locale: us) == nil)
+    }
+}
+
+/// Remembers whether the first-run backup existed when each process was spawned.
+final class SpawnLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _backedUpAtSpawn: [Bool] = []
+    var backedUpAtSpawn: [Bool] { lock.withLock { _backedUpAtSpawn } }
+    func record(_ value: Bool) { lock.withLock { _backedUpAtSpawn.append(value) } }
+}
+
+/// Every launch is gated on the first-run backup being done or recorded (review B1), and a backup that fails starts
+/// no server (review S1).
+@Suite("The first-run backup gates every launch")
+struct BackupGateTests {
+    let status: Components.Schemas.ServerStatus
+
+    init() throws {
+        status = try fixtureStatus()
+    }
+
+    private func controller(_ configuration: ServerConfiguration, _ spawns: SpawnLog) -> (ServerController, FakeLauncher) {
+        let data = configuration.dataFolder
+        let launcher = FakeLauncher { process, _ in
+            spawns.record(BackupManager(dataFolder: data).record() != nil)
+            process.ready()
+        }
+        let status = status
+        return (
+            ServerController(configuration: configuration, launcher: launcher, keySource: NoKeys(), probe: { _, _ in status }, timing: fastTiming),
+            launcher
+        )
+    }
+
+    @Test("locked by another app with no backup yet: nothing starts; unlocked, Try Again backs up before it launches")
+    func tryAgainAfterLocked() async throws {
+        let configuration = try fakeConfiguration()
+        try FileManager.default.createDirectory(at: configuration.dataFolder, withIntermediateDirectories: true)
+        try Data("history".utf8).write(to: configuration.dataFolder.appending(path: "history.db"))
+        let lock = configuration.dataFolder.appending(path: "server.lock")
+        try Data(#"{"pid":\#(getpid()),"startedAt":"x","app":"Pennant (Electron)"}"#.utf8).write(to: lock)
+        let spawns = SpawnLog()
+        let (controller, launcher) = controller(configuration, spawns)
+
+        await controller.start()
+        #expect(await controller.state == .locked(message: nil))
+        #expect(await controller.backupOutcome == .folderInUse)
+        #expect(launcher.launched.isEmpty)
+        #expect(controller.backups.record() == nil)
+
+        // The Electron app quits; the GM clicks Try Again
+        try FileManager.default.removeItem(at: lock)
+        await controller.tryAgain()
+        try await waitForState(controller) { $0.connection != nil }
+        #expect(spawns.backedUpAtSpawn == [true])
+        let record = try #require(controller.backups.record())
+        #expect(record.files == ["history.db"])
+        await controller.stop()
+    }
+
+    @Test("the app model's Try Again goes through the same gate")
+    @MainActor
+    func appModelTryAgain() async throws {
+        let configuration = try fakeConfiguration()
+        try FileManager.default.createDirectory(at: configuration.dataFolder, withIntermediateDirectories: true)
+        try Data("history".utf8).write(to: configuration.dataFolder.appending(path: "history.db"))
+        let lock = configuration.dataFolder.appending(path: "server.lock")
+        try Data(#"{"pid":\#(getpid())}"#.utf8).write(to: lock)
+        let spawns = SpawnLog()
+        let (controller, _) = controller(configuration, spawns)
+        let model = AppModel(configuration: configuration, controller: controller)
+        await model.start()
+        #expect(await eventually { model.serverState == .locked(message: nil) })
+        #expect(await eventually { model.backupOutcome == .folderInUse })
+        try FileManager.default.removeItem(at: lock)
+        await model.tryAgain()
+        #expect(await eventually { model.serverState.connection != nil })
+        #expect(spawns.backedUpAtSpawn == [true])
+        #expect(model.backups.record() != nil)
+        await model.shutdown()
+    }
+
+    @Test("a backup that fails starts no server, leaves no partial backup, and Try Again retries it")
+    func backupFailure() async throws {
+        let configuration = try fakeConfiguration()
+        let data = configuration.dataFolder
+        try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        try Data("settings".utf8).write(to: data.appending(path: "settings.json"))
+        let history = data.appending(path: "history.db")
+        try Data("history".utf8).write(to: history)
+        // Unreadable: the copy fails after settings.json… would have been copied
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: history.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: history.path) }
+        let spawns = SpawnLog()
+        let (controller, launcher) = controller(configuration, spawns)
+
+        await controller.start()
+        let state = await controller.state
+        guard case .failed(let failure) = state else {
+            Issue.record("expected a failure, got \(state)")
+            return
+        }
+        #expect(failure.kind == .backupFailed)
+        #expect(failure.detail != nil)
+        #expect(launcher.launched.isEmpty)
+        #expect(controller.backups.record() == nil)
+        let leftovers = (try? FileManager.default.contentsOfDirectory(atPath: controller.backups.backupsFolder.path)) ?? []
+        #expect(leftovers.filter { $0.hasPrefix("pre-swiftui-") }.isEmpty)
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: history.path)
+        await controller.tryAgain()
+        try await waitForState(controller) { $0.connection != nil }
+        #expect(spawns.backedUpAtSpawn == [true])
+        #expect(controller.backups.record()?.files == ["history.db", "settings.json"])
+        await controller.stop()
+    }
+
+    @Test("after a shutdown has begun, the app model starts nothing")
+    @MainActor
+    func noStartAfterShutdown() async throws {
+        let configuration = try fakeConfiguration()
+        let spawns = SpawnLog()
+        let (controller, launcher) = controller(configuration, spawns)
+        let model = AppModel(configuration: configuration, controller: controller)
+        await model.shutdown()
+        await model.start()
+        await model.tryAgain()
+        #expect(launcher.launched.isEmpty)
     }
 }

@@ -53,6 +53,9 @@ public struct ServerFailure: Sendable, Equatable {
         case couldNotLaunch
         /// The server did not accept the handshake (exit code 2).
         case handshake
+        /// The first-run backup could not be taken, so no server was started on the folder (section 7.5). `detail`
+        /// holds the error.
+        case backupFailed
         /// The server said why it could not start (`PENNANT_FAILED`, exit code 1). Not retried: its reason does not
         /// go away by waiting.
         case startFailed
@@ -117,6 +120,10 @@ public let liveStatusProbe: StatusProbe = { port, token in
 public actor ServerController {
     public nonisolated let configuration: ServerConfiguration
     public nonisolated let log: ServerLog
+    /// The data folder's first-run backup, which gates every launch.
+    public nonisolated let backups: BackupManager
+    /// What the first-run backup did on the latest launch.
+    public private(set) var backupOutcome: BackupManager.Outcome?
     private let launcher: any SidecarLauncher
     private let keySource: any KeySource
     private let probe: StatusProbe
@@ -163,6 +170,7 @@ public actor ServerController {
         self.timing = timing
         self.policy = timing.restart
         self.log = log ?? ServerLog(folder: configuration.logFolder)
+        self.backups = BackupManager(dataFolder: configuration.dataFolder)
     }
 
     // MARK: Watching
@@ -288,6 +296,11 @@ public actor ServerController {
             set(.failed(ServerFailure(kind: .notInstalled)))
             return
         }
+        // The first-run backup, before any server starts on the folder (section 7.5). Every launch passes here (the
+        // first start, Try Again from any state, a restart, a start after a restore), so none can skip it.
+        guard await firstRunBackupAllowsLaunch(launch: launchNumber) else { return }
+        guard launchNumber == generation, !stopRequested else { return }
+
         // The keys first, off the main thread and before anything is spawned: a slow Keychain delays the start,
         // never the handshake's 30 s
         let keys = await keySource.keys()
@@ -330,6 +343,34 @@ public actor ServerController {
         readyTimeoutTask = Task {
             try? await Task.sleep(for: readyTimeout)
             if !Task.isCancelled { self.readyTimedOut(launch: launchNumber) }
+        }
+    }
+
+    /// Takes the first-run backup unless it is recorded, off the actor and the main thread. A folder another server
+    /// holds is shown as locked without starting one; a backup that fails is a failure. Either way nothing spawns.
+    private func firstRunBackupAllowsLaunch(launch launchNumber: Int) async -> Bool {
+        let backups = backups
+        let result = await Task.detached(priority: .userInitiated) { Result { try backups.backUpIfFirstRun() } }.value
+        guard launchNumber == generation, !stopRequested else { return false }
+        switch result {
+        case .success(let outcome):
+            backupOutcome = outcome
+            switch outcome {
+            case .backedUp(let record):
+                let what = record.files.isEmpty ? "nothing (none of the files exist yet)" : record.files.joined(separator: ", ")
+                log.write("first-run backup: \(what) to backups/\(record.folder)", source: "app")
+                return true
+            case .alreadyDone:
+                return true
+            case .folderInUse:
+                log.write("the data folder is in use and has no first-run backup yet; not starting", source: "app")
+                set(.locked(message: nil))
+                return false
+            }
+        case .failure(let error):
+            log.write("the first-run backup failed: \(error); not starting", source: "app")
+            set(.failed(ServerFailure(kind: .backupFailed, detail: String(describing: error))))
+            return false
         }
     }
 
