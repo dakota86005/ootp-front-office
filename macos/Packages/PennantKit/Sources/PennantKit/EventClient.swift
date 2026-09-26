@@ -20,17 +20,40 @@ public enum EventSignal: Sendable, Equatable {
 /// carrying the status, so a gap is closed by the next connection.
 ///
 /// Known events are passed on; an event type this build has never heard of is ignored (a newer server may send
-/// it); a known type that did not decode is passed on as `malformed`.
+/// it); a known type that did not decode is passed on as `malformed`. A connection that fails or ends is logged
+/// (`onError`) and retried after a wait that doubles from `reconnectDelay` up to `maxReconnectDelay` while connecting
+/// keeps failing, and starts again from `reconnectDelay` after a connection that opened.
 public struct EventClient: Sendable {
     public let client: Client
     public var reconnectDelay: Duration
+    public var maxReconnectDelay: Duration
     /// Called for an unknown event type (for the log only).
     public var onUnknown: @Sendable (String) -> Void
+    /// Called when a connection fails or ends (for the log only).
+    public var onError: @Sendable (String) -> Void
 
-    public init(client: Client, reconnectDelay: Duration = .seconds(1), onUnknown: @escaping @Sendable (String) -> Void = { _ in }) {
+    public init(
+        client: Client,
+        reconnectDelay: Duration = .seconds(1),
+        maxReconnectDelay: Duration = .seconds(10),
+        onUnknown: @escaping @Sendable (String) -> Void = { _ in },
+        onError: @escaping @Sendable (String) -> Void = { _ in }
+    ) {
         self.client = client
         self.reconnectDelay = reconnectDelay
+        self.maxReconnectDelay = maxReconnectDelay
         self.onUnknown = onUnknown
+        self.onError = onError
+    }
+
+    /// The wait before the next attempt after `failures` attempts in a row that did not connect (1-based).
+    public func delay(afterFailures failures: Int) -> Duration {
+        var delay = reconnectDelay
+        for _ in 1..<max(failures, 1) {
+            delay *= 2
+            if delay >= maxReconnectDelay { return maxReconnectDelay }
+        }
+        return min(delay, maxReconnectDelay)
     }
 
     /// Reads one connection to its end, passing each event on. Throws what the connection threw.
@@ -52,18 +75,26 @@ public struct EventClient: Sendable {
         }
     }
 
-    /// Connects, reads, and connects again after `reconnectDelay` whenever the stream ends, until the task is
-    /// cancelled (the app cancels it when the server stops).
+    /// Connects, reads, and connects again after a wait whenever the stream ends, until the task is cancelled (the
+    /// app cancels it when the server stops; nothing is passed on after that).
     public func run(_ handle: (EventSignal) async -> Void) async {
+        var failures = 0
         while !Task.isCancelled {
+            var connected = false
             do {
-                try await readOnce(handle)
+                try await readOnce { signal in
+                    if signal == .connected { connected = true }
+                    await handle(signal)
+                }
+                if Task.isCancelled { return }
+                onError("the event stream ended")
             } catch {
                 if Task.isCancelled { return }
+                onError("the event stream failed: \(error)")
             }
-            if Task.isCancelled { return }
+            failures = connected ? 1 : failures + 1
             await handle(.disconnected)
-            try? await Task.sleep(for: reconnectDelay)
+            try? await Task.sleep(for: delay(afterFailures: failures))
         }
     }
 }

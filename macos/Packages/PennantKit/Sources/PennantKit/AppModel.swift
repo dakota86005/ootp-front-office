@@ -31,7 +31,8 @@ public final class AppModel {
     public private(set) var restoreCount = 0
     /// Whether the event stream is connected.
     public private(set) var eventStreamConnected = false
-    /// Events of a known type that did not decode, reported for the log (each also re-read `/api/status`).
+    /// The latest events of a known type that did not decode (each also re-read `/api/status`; at most
+    /// `keptEventProblems`).
     public private(set) var eventProblems: [EventProblem] = []
     /// What the first-run backup did on the latest launch (the controller takes it before every launch; a failure
     /// is the server state `.failed(.backupFailed)`).
@@ -40,6 +41,9 @@ public final class AppModel {
     public private(set) var lastRequestError: String?
     /// The client for the running server; nil while it is not ready.
     public private(set) var client: Client?
+
+    /// How many event problems are kept (the log has them all).
+    public static let keptEventProblems = 20
 
     public struct EventProblem: Sendable, Equatable {
         public var type: String
@@ -173,7 +177,11 @@ public final class AppModel {
         apply(status: connection.status, reload: false)
         eventTask?.cancel()
         let log = controller.log
-        let events = EventClient(client: client) { type in log.write("ignored an event of a newer type: \(type)", source: "app") }
+        let events = EventClient(
+            client: client,
+            onUnknown: { type in log.write("ignored an event of a newer type: \(type)", source: "app") },
+            onError: { problem in log.write(problem, source: "app") }
+        )
         eventTask = Task { [weak self] in
             await events.run { signal in await self?.handle(signal) }
         }
@@ -189,6 +197,7 @@ public final class AppModel {
             eventStreamConnected = false
         case .malformed(let type):
             eventProblems.append(EventProblem(type: type, at: .now))
+            eventProblems = Array(eventProblems.suffix(Self.keptEventProblems))
             controller.log.write("an event of type \(type) did not decode; re-reading the status", source: "app")
             await reloadStatus()
         case .event(let event):

@@ -82,6 +82,81 @@ struct EventClientTests {
     }
 }
 
+/// Reconnecting with backoff, logged, and a clean stop (review N3); a bounded problem list (review N4).
+@Suite("Reconnecting to the event stream")
+struct EventReconnectTests {
+    private func client(_ transport: RoutedTransport) -> Client {
+        PennantClient.make(port: 51_000, token: String(repeating: "t", count: 64), transport: transport)
+    }
+
+    @Test("the wait doubles while connecting keeps failing, and stops at the cap")
+    func schedule() {
+        let events = EventClient(client: client(RoutedTransport([:])), reconnectDelay: .seconds(1), maxReconnectDelay: .seconds(10))
+        #expect((1...6).map { events.delay(afterFailures: $0) } == [1, 2, 4, 8, 10, 10].map { Duration.seconds($0) })
+    }
+
+    @Test("failures are logged, and the attempts slow down")
+    func failuresLoggedAndSlower() async {
+        let problems = SignalLog()
+        let transport = RoutedTransport([:])
+        let events = EventClient(
+            client: client(transport), reconnectDelay: .milliseconds(20), maxReconnectDelay: .milliseconds(160),
+            onError: { problems.appendUnknown($0) }
+        )
+        let task = Task { await events.run { _ in } }
+        try? await Task.sleep(for: .milliseconds(400))
+        task.cancel()
+        await task.value
+        // 20 + 40 + 80 + 160 … ms: about five attempts in 400 ms, where a fixed 20 ms would make twenty
+        #expect(transport.paths.count <= 7)
+        #expect(transport.paths.count >= 3)
+        #expect(problems.unknownTypes.first?.contains("failed") == true)
+    }
+
+    @Test("a stream that opened and then ended starts the wait again from the first step")
+    func resetsAfterConnecting() async throws {
+        let sse = try String(decoding: fixtureData("events.sse"), as: UTF8.self)
+        let transport = RoutedTransport(["/api/v2/events": RoutedTransport.sse(sse)])
+        let problems = SignalLog()
+        let events = EventClient(
+            client: client(transport), reconnectDelay: .milliseconds(20), maxReconnectDelay: .seconds(5),
+            onError: { problems.appendUnknown($0) }
+        )
+        let task = Task { await events.run { _ in } }
+        try? await Task.sleep(for: .milliseconds(300))
+        task.cancel()
+        await task.value
+        // Always connecting, so never slowed: many attempts, each logged as ended
+        #expect(transport.paths.count >= 6)
+        #expect(problems.unknownTypes.allSatisfy { $0 == "the event stream ended" })
+    }
+
+    @Test("cancelling (the server stopped) ends the loop at once, passing nothing more on")
+    func cleanStop() async {
+        let transport = RoutedTransport([:])
+        let collected = SignalLog()
+        let events = EventClient(client: client(transport), reconnectDelay: .seconds(30))
+        let task = Task { await events.run { collected.append($0) } }
+        #expect(await eventually { collected.signals.contains(.disconnected) })
+        let count = collected.signals.count
+        let cancelled = ContinuousClock.now
+        task.cancel()
+        await task.value
+        #expect(ContinuousClock.now - cancelled < .seconds(1))
+        #expect(collected.signals.count == count)
+    }
+
+    @Test("the app model keeps only the latest event problems")
+    @MainActor
+    func boundedProblems() async throws {
+        let configuration = try fakeConfiguration()
+        let model = AppModel(configuration: configuration)
+        for n in 0..<(AppModel.keptEventProblems + 15) { await model.handle(.malformed(type: "type-\(n)")) }
+        #expect(model.eventProblems.count == AppModel.keptEventProblems)
+        #expect(model.eventProblems.last?.type == "type-\(AppModel.keptEventProblems + 14)")
+    }
+}
+
 final class SignalLog: @unchecked Sendable {
     private let lock = NSLock()
     private var _signals: [EventSignal] = []
