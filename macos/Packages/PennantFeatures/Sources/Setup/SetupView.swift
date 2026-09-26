@@ -236,6 +236,7 @@ private struct ImportStep: View {
                     switch problem {
                     case .served(let text, let detail): ProblemLine(served: text, detail: detail)
                     case .request(let request): ProblemLine(request)
+                    case .notStarted: ProblemLine(Text("The import did not start"))
                     case .unexplained: ProblemLine(Text("The import did not finish"))
                     }
                     HStack {

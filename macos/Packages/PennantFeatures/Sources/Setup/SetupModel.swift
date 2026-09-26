@@ -31,6 +31,9 @@ public final class SetupModel {
         /// The server's sentence (the status's `importNote`, the chosen save's `why`, or a refusal's `error`), with the
         /// raw message behind it when the server sent one.
         case served(String, detail: String? = nil)
+        /// The save was chosen but its import did not start, and the server said nothing about why (an older server):
+        /// a structural line.
+        case notStarted
         /// The import ended with no new import and the server said nothing about why (an older server): a structural
         /// line.
         case unexplained
@@ -220,7 +223,7 @@ public final class SetupModel {
         step = .importing
         // The save is chosen, but its import did not start: the server says why
         guard accepted.importStarted else {
-            importProblem = accepted.why.map { .served($0) } ?? .unexplained
+            importProblem = accepted.why.map { .served($0) } ?? .notStarted
             return
         }
         await readStatus(client)

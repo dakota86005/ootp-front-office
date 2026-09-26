@@ -212,6 +212,14 @@ struct SetupModelTests {
         #expect(model.importProblem == nil)
     }
 
+    @Test("a save whose import did not start, with no word from the server, says it did not start (never \"finish\")")
+    func notStartedWithoutWords() async throws {
+        let model = makeModel()
+        server.answer("setSave", (200, #"{"ok":true,"importStarted":false,"why":null}"#))
+        await model.choose(PreviewFixtures.saves[0], status: try status())
+        #expect(model.importProblem == .notStarted)
+    }
+
     @Test("a refused save shows the server's sentence and stays on the first step")
     func refusedSave() async throws {
         let model = makeModel()

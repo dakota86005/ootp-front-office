@@ -376,6 +376,9 @@
     "The import did not finish": {
       "extractionState": "manual"
     },
+    "The import did not start": {
+      "extractionState": "manual"
+    },
     "The request failed": {
       "extractionState": "manual"
     },
