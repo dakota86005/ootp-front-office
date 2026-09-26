@@ -207,18 +207,63 @@ struct AppModelRequestTests {
         ].merging(extra) { $1 }
     }
 
-    @Test("a refused import returns the server's own sentence; nothing is asked before the server is up")
+    @Test("a refused import returns the server's own sentence and keeps it for the windows; without a server it is a failure, not a start")
     func importRefused() async throws {
         let transport = RoutedTransport(
             try answers(["POST /api/import": RoutedTransport.json("startImport-no-save")]),
             statuses: ["POST /api/import": 400]
         )
         let model = try model(transport)
-        #expect(await model.startImport() == nil)
+        #expect(await model.startImport() == .notRunning)
+        #expect(model.importRequestProblem == .notRunning)
         #expect(!transport.paths.contains("/api/import"))
         await model.start()
         #expect(await eventually { model.settings != nil })
-        #expect(await model.startImport() == "No save configured")
+        #expect(await model.startImport() == .served("No save configured"))
+        #expect(model.importRequestProblem == .served("No save configured"))
+        model.dismissImportRequestProblem()
+        #expect(model.importRequestProblem == nil)
+        await model.shutdown()
+    }
+
+    @Test("an import refused because one is running says so in the server's words")
+    func importAlreadyRunning() async throws {
+        let transport = RoutedTransport(
+            try answers(["POST /api/import": RoutedTransport.json("startImport-import-running")]),
+            statuses: ["POST /api/import": 409]
+        )
+        let model = try model(transport)
+        await model.start()
+        #expect(await eventually { model.settings != nil })
+        let problem = await model.startImport()
+        guard case .served(let sentence) = problem else {
+            Issue.record("expected the server's sentence, got \(String(describing: problem))")
+            return
+        }
+        #expect(sentence.contains("already running"))
+        await model.shutdown()
+    }
+
+    @Test("a request that fails is a kind of problem with its detail kept for the log, never shown as text")
+    func requestFailure() async throws {
+        let transport = RoutedTransport(try answers([:]), statuses: ["POST /api/settings": 500])
+        let model = try model(transport)
+        await model.start()
+        #expect(await eventually { model.settings != nil })
+        do {
+            try await model.saveSettings(.init(defaultOrgId: 2))
+            Issue.record("expected a problem")
+        } catch {
+            guard case .failed(let detail) = error else {
+                Issue.record("expected .failed, got \(error)")
+                return
+            }
+            #expect(detail.contains("500"))
+        }
+        guard case .unreachable = RequestProblem.from(URLError(.timedOut)) else {
+            Issue.record("a timeout is the server not reached")
+            return
+        }
         await model.shutdown()
     }
 
@@ -240,6 +285,7 @@ struct AppModelRequestTests {
         let transport = RoutedTransport(try answers(["POST /api/settings": RoutedTransport.json("saveSettings-club")]))
         let model = try model(transport)
         await expectThrows { try await model.saveSettings(.init(defaultOrgId: 2)) }
+        do { try await model.saveSettings(.init(defaultOrgId: 2)) } catch { #expect(error == .notRunning) }
         await model.start()
         #expect(await eventually { model.settings != nil })
         let before = transport.paths.filter { $0 == "/api/settings" }.count

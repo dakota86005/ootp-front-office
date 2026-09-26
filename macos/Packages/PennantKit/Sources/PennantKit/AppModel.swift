@@ -37,6 +37,8 @@ public final class AppModel {
     /// What the first-run backup did on the latest launch (the controller takes it before every launch; a failure
     /// is the server state `.failed(.backupFailed)`).
     public private(set) var backupOutcome: BackupManager.Outcome?
+    /// Why the last import the GM asked for did not start (⌘R, Import Now); nil when it started or was dismissed.
+    public private(set) var importRequestProblem: RequestProblem?
     /// The last request that failed, for the log.
     public private(set) var lastRequestError: String?
     /// The client for the running server; nil while it is not ready.
@@ -79,7 +81,8 @@ public final class AppModel {
         status: Components.Schemas.ServerStatus? = nil,
         settings: Components.Schemas.SettingsResponse? = nil,
         orgs: [Components.Schemas.Org] = [],
-        dataStatus: Components.Schemas.DataStatus? = nil
+        dataStatus: Components.Schemas.DataStatus? = nil,
+        importRequestProblem: RequestProblem? = nil
     ) -> AppModel {
         let model = AppModel(configuration: configuration)
         model.serverState = state
@@ -87,6 +90,7 @@ public final class AppModel {
         model.settings = settings
         model.orgs = orgs
         model.dataStatus = dataStatus
+        model.importRequestProblem = importRequestProblem
         model.club = CurrentClub.from(served: settings?.organization, orgs: orgs)
         return model
     }
@@ -191,38 +195,58 @@ public final class AppModel {
 
     /// Club ▸ Refresh Data and Settings ▸ Import Now (React's `hardRefresh`): starts an import of the configured save's
     /// export. Progress arrives on the event stream, and when the import lands `importStamp` moves, so every store
-    /// reloads. Returns the server's own sentence when it refused (no save chosen, the export folder missing), or a
-    /// description of the error when the request failed; nil when the import started.
+    /// reloads. Returns nil when the import started, else why not: the server's own sentence when it refused (no save
+    /// chosen, the export folder missing, an import already running), `.notRunning` without a server, or the kind of
+    /// failure. The problem is also kept in `importRequestProblem`, so every window can show it.
     @discardableResult
-    public func startImport() async -> String? {
-        guard let client else { return nil }
+    public func startImport() async -> RequestProblem? {
+        let problem = await requestImport()
+        importRequestProblem = problem
+        if let detail = problem?.detail { logProblem("could not start an import: \(detail)") }
+        return problem
+    }
+
+    private func requestImport() async -> RequestProblem? {
+        guard let client else { return .notRunning }
         do {
             switch try await client.startImport() {
             case .ok:
                 status?.importing = true
                 return nil
             case .badRequest(let refused):
-                return try refused.body.json.error
+                return .served(try refused.body.json.error)
+            case .conflict(let refused):
+                return .served(try refused.body.json.error)
             case .undocumented(let code, _):
-                return "HTTP \(code)"
+                return .undocumented(code, operation: "startImport")
             }
         } catch {
-            note(error, reading: "import")
-            return String(describing: error)
+            return .from(error)
         }
     }
 
+    /// Clears the last import request's problem (the GM dismissed it).
+    public func dismissImportRequestProblem() { importRequestProblem = nil }
+
     /// Saves preferences (`POST /api/settings`: the club the Setup window picked, the appearance); a field left nil
     /// keeps its value. The settings, the clubs and the current club are read again afterwards, so the served club
-    /// (and with it `storeKey`) follows.
-    public func saveSettings(_ update: Components.Schemas.SettingsUpdate) async throws {
-        guard let client else { throw NotReady() }
-        _ = try await client.saveSettings(body: .json(update)).ok
+    /// (and with it `storeKey`) follows. Throws a `RequestProblem`; its raw detail goes to the log.
+    public func saveSettings(_ update: Components.Schemas.SettingsUpdate) async throws(RequestProblem) {
+        guard let client else { throw .notRunning }
+        do {
+            _ = try await client.saveSettings(body: .json(update)).ok
+        } catch {
+            let problem = RequestProblem.from(error)
+            if let detail = problem.detail { logProblem("could not save the settings: \(detail)") }
+            throw problem
+        }
         await reloadAll()
     }
 
-    /// The server is not running, so nothing could be asked of it.
-    public struct NotReady: Error, Sendable {}
+    /// Writes a line to the server's log (a raw error a window shows only as a kind).
+    public func logProblem(_ line: String) {
+        controller.log.write(line, source: "app")
+    }
 
     // MARK: Following the server
 
@@ -272,6 +296,7 @@ public final class AppModel {
         if let hello = event.value1 {
             apply(status: hello.status, reload: true)
         } else if event.value2 != nil {
+            importRequestProblem = nil
             status?.importing = true
             status?.importProgress = nil
             status?.lastError = nil
