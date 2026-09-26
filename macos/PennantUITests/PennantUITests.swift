@@ -189,9 +189,14 @@ final class PennantUITests: XCTestCase {
         app.typeKey("i", modifierFlags: [.command, .option])
         XCTAssertTrue(element(app, "inspector").waitForNonExistence(timeout: 5))
 
-        // Audit the window at rest: the sidebar scrolled to its top, so no row is caught passing under the toolbar's
-        // glass (a row half under the glass reads as low contrast; macOS scrolls every sidebar under it)
-        app.outlines["sidebar"].firstMatch.scroll(byDeltaX: 0, deltaY: 2000)
+        // Audit the window at rest: every department folded and the sidebar at its top, so the whole list fits and no
+        // row is caught half under the toolbar's glass or cut by the window's edge (a half-shown line reads as low
+        // contrast; every macOS sidebar scrolls that way)
+        let sidebar = app.outlines["sidebar"].firstMatch
+        for triangle in sidebar.disclosureTriangles.allElementsBoundByIndex where (triangle.value as? Int) == 1 {
+            triangle.click()
+        }
+        sidebar.scroll(byDeltaX: 0, deltaY: 2000)
         try audit(app)
 
         app.typeKey(",", modifierFlags: .command)
