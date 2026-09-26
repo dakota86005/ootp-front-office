@@ -387,9 +387,6 @@
     },
     "Your club": {
       "extractionState": "manual"
-    },
-    "circle": {
-      "extractionState": "manual"
     }
   },
   "version": "1.0"

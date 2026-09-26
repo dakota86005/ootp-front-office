@@ -158,6 +158,8 @@ private struct FindSaveStep: View {
 /// Saves as served: name, when their export was written, and how many export files there are. A save with no
 /// export files cannot be chosen.
 private struct SaveList: View {
+    static let chosenSymbol = "largecircle.fill.circle"
+    static let unchosenSymbol = "circle"
     let saves: [Components.Schemas.SaveInfo]
     @Binding var selected: String?
 
@@ -167,7 +169,7 @@ private struct SaveList: View {
                 selected = save.lgPath
             } label: {
                 HStack {
-                    Image(systemName: selected == save.lgPath ? "largecircle.fill.circle" : "circle")
+                    Image(systemName: selected == save.lgPath ? Self.chosenSymbol : Self.unchosenSymbol)
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(verbatim: save.name).font(.headline)
