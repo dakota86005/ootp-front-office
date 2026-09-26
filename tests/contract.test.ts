@@ -300,6 +300,7 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
   /**
    * The POSTs, in the answers that are safe to cause here (the synthetic data folder is a temporary one). Setting a
    * save and starting an import (their 200s) would start an import; their 400s are checked, their 200s are not.
+   * Saving the settings writes the temporary folder's settings file, and is put back.
    */
   const POSTS: Record<string, Array<{ body: unknown; status: number; name: string }>> = {
     resolveFolder: [
@@ -312,6 +313,11 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
       { name: 'not-a-save', body: { lgPath: '/nowhere/Not A Save.lg' }, status: 400 },
     ],
     setSave: [{ name: 'no-folder', body: {}, status: 400 }],
+    // The Setup window saves the club it picked; the second case puts the preferences back for the tests after it
+    saveSettings: [
+      { name: 'club', body: { defaultOrgId: 2, theme: 'dark' }, status: 200 },
+      { name: 'restored', body: { defaultOrgId: null, theme: 'system' }, status: 200 },
+    ],
     startImport: [{ name: 'no-save', body: undefined, status: 400 }],
   };
 

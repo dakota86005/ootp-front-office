@@ -278,6 +278,35 @@
             }
           }
         }
+      },
+      "post": {
+        "operationId": "saveSettings",
+        "summary": "Change preferences (the club, the appearance, ...); a field left out keeps its value.",
+        "tags": [
+          "reused"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaved"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/settings/providers": {
@@ -2067,6 +2096,113 @@
           "dataDir"
         ],
         "description": "What `GET /api/settings` serves."
+      },
+      "SettingsSaved": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Settings"
+          }
+        },
+        "required": [
+          "ok",
+          "settings"
+        ],
+        "description": "What `POST /api/settings` answers: the preferences as saved."
+      },
+      "SettingsUpdate": {
+        "type": "object",
+        "properties": {
+          "autoImport": {
+            "type": "boolean"
+          },
+          "useTeamColors": {
+            "type": "boolean"
+          },
+          "roundRatingsToFive": {
+            "type": "boolean",
+            "description": "Write overall and potential in fives, the way scouts talk. Display only — sorting and every calculation keep the exact grade."
+          },
+          "showUnavailablePitchers": {
+            "type": "boolean",
+            "description": "Keep pitchers on the injured list in the bullpen table.\n\nOff unless asked for. That page answers one question — who can throw tonight — and a man six weeks from a rehab start is not an answer to it. Nothing vanishes quietly: the heading says how many are being held back and hands them over in a click."
+          },
+          "autoGenerateAfterImport": {
+            "type": "boolean",
+            "description": "Write the storylines and the briefing by themselves after each import.\n\nOff unless asked for. Both cost money on someone else's API key, and a setting that quietly spends it would be a poor default however convenient."
+          },
+          "defaultOrgId": {
+            "$ref": "#/components/schemas/Integer"
+          },
+          "theme": {
+            "description": "'system' follows the OS setting and changes with it.",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "dark",
+                  "light"
+                ]
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderId",
+            "description": "Which service the AI features talk to. Anthropic unless changed — it is what the app was built against and the only one the chat's tool loop and prompt caching are native to."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model id used by every AI feature. See models.ts for the picker's list."
+          },
+          "models": {
+            "type": "object",
+            "properties": {
+              "anthropic": {
+                "type": "string"
+              },
+              "openai": {
+                "type": "string"
+              },
+              "gemini": {
+                "type": "string"
+              },
+              "opencode": {
+                "type": "string"
+              },
+              "ollama": {
+                "type": "string"
+              }
+            },
+            "description": "The model chosen for each provider, remembered separately. Switching provider would otherwise leave a model id the new one has never heard of."
+          },
+          "aiFeatures": {
+            "type": "object",
+            "properties": {
+              "briefing": {
+                "$ref": "#/components/schemas/AiFeatureSettings"
+              },
+              "trade": {
+                "$ref": "#/components/schemas/AiFeatureSettings"
+              },
+              "storylines": {
+                "$ref": "#/components/schemas/AiFeatureSettings"
+              },
+              "chat": {
+                "$ref": "#/components/schemas/AiFeatureSettings"
+              }
+            },
+            "description": "Optional provider/model overrides for individual AI workloads.\n\nMissing entries inherit the global provider and that provider's selected model, preserving the behaviour of existing settings files."
+          }
+        },
+        "description": "What `POST /api/settings` takes: the preferences to change. A field left out keeps its value, and a value the handler cannot use is ignored. (Philosophy and next season's budget have routes of their own.)"
       },
       "SnapshotMeta": {
         "type": "object",

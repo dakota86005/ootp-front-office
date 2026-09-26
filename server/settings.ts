@@ -512,8 +512,35 @@ settingsRoutes.put('/next-season-budget/:orgId', (req, res) => {
   res.json({ ok: true, nextSeasonBudget: amount });
 });
 
-settingsRoutes.post('/settings', (req, res) => {
-  const body = req.body as Partial<Settings>;
+/**
+ * What `POST /api/settings` takes: the preferences to change. A field left out keeps its value, and a value the
+ * handler cannot use is ignored. (Philosophy and next season's budget have routes of their own.)
+ */
+export type SettingsUpdate = Partial<
+  Pick<
+    Settings,
+    | 'autoImport'
+    | 'useTeamColors'
+    | 'roundRatingsToFive'
+    | 'showUnavailablePitchers'
+    | 'autoGenerateAfterImport'
+    | 'defaultOrgId'
+    | 'theme'
+    | 'provider'
+    | 'model'
+    | 'models'
+    | 'aiFeatures'
+  >
+>;
+
+/** What `POST /api/settings` answers: the preferences as saved. */
+export interface SettingsSaved {
+  ok: true;
+  settings: Settings;
+}
+
+settingsRoutes.post('/settings', (req, res: Response<SettingsSaved>) => {
+  const body = req.body as SettingsUpdate;
   const previous = loadSettings();
   const next: Settings = { ...previous };
   /*
@@ -526,8 +553,9 @@ settingsRoutes.post('/settings', (req, res) => {
    * is saved the moment it is declared.
    */
   for (const field of Object.keys(DEFAULTS) as Array<keyof Settings>) {
-    if (typeof DEFAULTS[field] === 'boolean' && typeof body[field] === 'boolean') {
-      (next[field] as boolean) = body[field] as boolean;
+    const value = (body as Partial<Settings>)[field];
+    if (typeof DEFAULTS[field] === 'boolean' && typeof value === 'boolean') {
+      (next[field] as boolean) = value;
     }
   }
   if (body.defaultOrgId === null || typeof body.defaultOrgId === 'number') {
