@@ -168,8 +168,8 @@ Undoing the cutover after it merges is `git revert` of that one PR.
 
 ### The sidecar
 
-The Mac app runs this server as a child process (`server/sidecar.ts`, SWIFTUI_REBUILD.md section 5). Until the Swift
-app exists (N3), build and run it by hand:
+The Mac app runs this server as a child process (`server/sidecar.ts`, SWIFTUI_REBUILD.md section 5), from inside its
+bundle ("The Mac app" below). To build and run it by hand:
 
 ```bash
 npm run build:sidecar
@@ -238,6 +238,55 @@ breaks the generated client fails the pull request.
 
 **An interrupted import.** If the server stops while importing, or the import fails partway, `import-in-progress.json` stays in the data folder,
 `/api/status` reports `importInterruptedSince`, and the next start imports the export again.
+
+### The Mac app
+
+The Xcode project is `macos/Pennant.xcodeproj` (scheme `Pennant`), over the local packages in `macos/Packages/`
+(PennantAPI, PennantKit, PennantDesign). The app carries the server inside it, so stage the server first; this runs
+`build:sidecar` and `sidecar:node`, then installs the production dependencies for the bundled Node in their own folder
+(the repository's `node_modules` is left as it is, whichever ABI it holds):
+
+```bash
+npm run mac:stage
+```
+
+The build copies `build/macos-server/` into the app and stops, naming that command, when it is missing or stale. A Debug
+build signs with the Apple Development identity on team `6T7RV2A4DQ` if the Mac has it; to build without signing, pass
+`CODE_SIGNING_ALLOWED=NO`, and to build without the server (as CI does), `PENNANT_SKIP_SERVER=YES`.
+
+**Run it on a scratch folder, never the real one.** A Debug build reads its data folder from `PENNANT_DEV_DATA_DIR` (or
+the launch argument `-PennantDevDataFolder <folder>`; the log goes to `PENNANT_DEV_LOG_DIR`, else `logs/` inside it). A
+Release build ignores both. Without the override a Debug build uses the real data folder, like the Electron app: set it
+in the scheme's Run environment (in your own, unshared scheme settings) or launch from a shell. A synthetic league to
+point it at:
+
+```bash
+npm run synthetic:league -- /tmp/pennant-dev
+```
+
+```bash
+PENNANT_DEV_DATA_DIR=/tmp/pennant-dev "<DerivedData>/Build/Products/Debug/Pennant.app/Contents/MacOS/Pennant"
+```
+
+The first start on a folder backs up its irreplaceable files to `backups/pre-swiftui-<date>/` (SWIFTUI_REBUILD.md
+section 7.5). The server's log is `server.log` in the log folder (`~/Library/Logs/Pennant/` for a release build).
+
+**Tests.** One script runs them all, with output in `build/macos-test/` (summaries and failures are printed):
+
+```bash
+macos/scripts/test.sh
+```
+
+It writes the synthetic league into a scratch folder, stages the server, runs each package's `swift test` (PennantKit's
+include an integration test that starts the real staged server), then `xcodebuild test` on the Pennant scheme with the
+app on a fresh scratch folder, and extracts the XCUITest screenshots into `build/macos-test/screenshots/`.
+`PENNANT_TEST_NO_UI=1` skips the XCUITests; `PENNANT_TEST_UNSIGNED=1` builds unsigned. The XCUITests need UI automation,
+which the Mac's owner enables once (running the scheme's tests from Xcode asks for it). CI (`pennant-mac` in `ci.yml`)
+runs the PennantKit and PennantDesign tests and builds the app and its UI tests unsigned, without the server.
+
+The unknown-last comparator's cases (`contract/fixtures/sort-cases.json`) are shared: `tests/sortCases.test.ts` runs them
+against a TypeScript reference, PennantKit against the app. The String Catalog is checked against the banned-jargon list
+by `tests/stringCatalog.test.ts`.
 
 ## Versions
 

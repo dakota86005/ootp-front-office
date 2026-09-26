@@ -3,7 +3,10 @@
 **Status:** design, 2026-09-25. Milestone N0 is done (2026-09-25: the restore point, the decisions D-055 to D-060 and
 the D-052 amendment, the behaviour cases, the ground rules; section 12). Milestone N1 is done (2026-09-25: the sidecar
 server, section 5; "As built" below). Milestone N2 is done (2026-09-25: the contract pipeline, section 4.3; "As built"
-there). Nothing else in this document is implemented yet. It supersedes the UI parts of the
+there). Milestone N3 is under way: its Stage A (2026-09-26: the Xcode project and packages, the server inside the app,
+`ServerController`, `AppModel`, the event client, routes, the comparator, backups and the test script; "As built at N3" in
+sections 5.2, 5.3, 6, 7 and 8) is built; Stage B, the window shell and first run, is next. Nothing else in this document is
+implemented yet. It supersedes the UI parts of the
 V2 web plan (`~/.claude/plans/okay-can-we-please-effervescent-cherny.md`, sections 3 and 4). The server-side
 parts of that plan (the Front Office contract, the Club Profile, the roster map, the horizon board, the league
 wire, snapshots and the GM's desk) carry over unchanged in intent and are scheduled here.
@@ -413,6 +416,25 @@ answered, better-sqlite3 loaded, and the calibration refit worker ran from besid
 
 A stable Developer ID signature means these prompts and Keychain prompts appear once, not on every update.
 
+**As built at N3, Stage A (2026-09-26).**
+- `npm run mac:stage` (`macos/scripts/stage-server.sh`) stages `build/macos-server/` in the bundle's layout: the pinned
+  Node binary as `Helpers/pennant-server`, and in `Resources/server/` the sidecar bundle (`server.cjs`, both refit
+  workers, `package.json`), Node's licence (`NODE_LICENSE`) and a production `node_modules` (no `electron-updater`;
+  every version as `package-lock.json` pins it). The install runs in its own folder (`build/macos-server-install/`) with
+  the pinned binary first on `PATH`, so better-sqlite3 is built for that Node and the repository's own `node_modules`
+  (whichever ABI it holds) is never touched; the `.forge-meta` trap cannot reach it. The install is reused until the
+  lockfile, the runtime dependencies or the Node version change. Pruned: better-sqlite3's sources and build
+  intermediates, type declarations, source maps and READMEs. About 150 MB, 116 MB of it Node.
+- The Pennant target's last phase, "Embed the server" (`macos/scripts/embed-server.sh`), sets `CFBundleShortVersionString`
+  and `CFBundleVersion` from `package.json` (the one place the version lives), copies the stage into the bundle, and
+  fails naming `npm ci && npm run mac:stage` when the stage is missing or holds another version. A build that signs
+  signs inside out: each `.node`, then the Node binary with the hardened runtime and only `allow-jit` and
+  `allow-unsigned-executable-memory` (`macos/Support/pennant-server.entitlements`); Xcode signs the app last.
+  `PENNANT_SKIP_SERVER=YES` builds an app without a server (CI); it starts and says the server is missing.
+- Development builds sign automatically with the owner's Apple Development identity on team `6T7RV2A4DQ`; no
+  provisioning profile is needed, since the app has no restricted entitlement. Secure timestamps and notarization wait
+  for N14.
+
 ### 5.3 Lifecycle (`ServerController`, a Swift actor)
 
 1. **Spawn** with these variables:
@@ -441,6 +463,31 @@ A stable Developer ID signature means these prompts and Keychain prompts appear 
    and checks all of it. Making the import itself all-or-nothing (one transaction, or staging tables swapped in at
    the end) remains possible later; it was not needed for safety.
 4. **Logs:** captured to `~/Library/Logs/Pennant/server.log` (rotated), viewable from Help ▸ Server Log.
+
+**As built at N3, Stage A (2026-09-26).** `ServerController` (PennantKit) holds each step; `ServerControllerTests` drive it
+with scripted processes, and `ServerIntegrationTests` with the real staged server on the synthetic league.
+- The child gets only `HOME`, `USER`, `LOGNAME`, `TMPDIR`, `LANG`, `LC_ALL`, a fixed `PATH` and the five variables. The
+  app's own environment is not passed on, so a provider key exported in a shell cannot outrank the Keychain's. The
+  handshake carries a fresh 64-character token and the keys read from the Keychain (`com.dakotawise.pennant.apikeys`,
+  one generic password per provider id, read without ever showing a prompt; saving a key arrives with N13).
+- Ready means `PENNANT_READY` within 30 s and then `GET /api/status` (three tries, half a second apart). No ready line
+  in time, or a status that never answers, is a failure (the process is stopped), not a crash to retry: a hang does
+  not cure itself.
+- Exit code 3 (or `reason: "locked"`) shows the server's own sentence naming the holder, and is not retried; exit code
+  2 is a failure. Anything else is a crash: the wait doubles per crash in a row, 1 s to 30 s (a server that ran for a
+  whole two minutes starts the count again), and five crashes inside two minutes stop the restarts. Try Again forgets
+  them.
+- Quit: `applicationShouldTerminate` returns `.terminateLater`, stops the server (SIGTERM, 5 s, SIGKILL) and replies. A
+  SIGTERM sent to the app quits the same way; it is started from the main run loop, not from a main-queue block,
+  because the nested run loop `.terminateLater` waits in must drain the main queue where the stop runs. When the app is
+  killed outright, the server sees stdin close and stops itself, releasing the lock (checked on a real build).
+- stdout is read with a readability handler, a line at a time: `FileHandle.bytes.lines` held the ready line back until
+  the pipe closed.
+- `server.log` rotates at 5 MB and keeps three older files; the token and keys are never written (the handshake is on
+  stdin, which is not logged). The failure screen's Show Log opens it; the Help menu item comes with the menus.
+- The event client (`EventClient`) passes known events on, ignores a type this build has never heard of (logging it),
+  reports a known type that did not decode and re-reads `/api/status`, and reconnects a second after the stream ends
+  while the server is up.
 
 ---
 
@@ -496,6 +543,35 @@ A stable Developer ID signature means these prompts and Keychain prompts appear 
   - A number shown is a number served.
   - A script scans the String Catalog with the same banned-jargon list.
 
+**As built at N3, Stage A (2026-09-26).**
+- `macos/Pennant.xcodeproj`, written by hand: folder-synchronized groups (`Pennant/`, `PennantUITests/`; `Support/` and
+  `scripts/` are shown but belong to no target), one shared scheme `Pennant`, Debug (`com.dakotawise.pennant.dev`,
+  "Pennant Dev") and Release (`com.dakotawise.pennant`), arm64 only. The app is Swift 6 with `MainActor` default
+  isolation and Approachable Concurrency; the UI-test target is `nonisolated`, XCTest's own isolation. Hardened runtime,
+  no App Sandbox. `Support/Info.plist` adds only the three exported drag types to the generated Info.plist.
+- Packages: PennantAPI (N2); **PennantKit** (`ServerController`, `SidecarProtocol`, `RestartPolicy`, `ServerLog`, the
+  Keychain key source, `PennantClient`, `EventClient`, `AppModel`, `CurrentClub`, `BackupManager`, the routes,
+  `UnknownLast`, `ServedFormat`); **PennantDesign** (only `ServedColor`, a served hex colour, so far). PennantKit keeps
+  Swift's default nonisolated isolation, since it holds an actor and value types used from both sides (`AppModel` is
+  `@MainActor` by name); PennantDesign uses `MainActor` like the app. No new dependency: PennantKit names the approved
+  runtime and URLSession packages directly.
+- `AppModel` holds the server's state, the status (kept current by events), settings, clubs, the current club (the
+  configured one when the club list has it, else the human-managed one, else none), the data status, the import under
+  way, and `importStamp`: the last import's finish time, which moves only when a new import lands.
+- Routing: `AppRoute` (an open `DeptID` and a view id), `PlayerRef`, `ClubRef` and `ComparisonRef`, all `Codable`,
+  `Hashable` and `Transferable` (as `com.dakotawise.pennant.player`, `.club` and `.comparison`).
+- The unknown-last comparator orders numbers by value and strings by UTF-16 code units (as JavaScript compares them),
+  every number before every string, unknown last in both directions, ties in the order served.
+  `contract/fixtures/sort-cases.json` is run by `tests/sortCases.test.ts` (a TypeScript reference) and by
+  `UnknownLastTests`.
+- `ServedFormat` formats only a served count or share that has no display string (an import's progress).
+- A Debug build can be pointed at a development data folder (`PENNANT_DEV_DATA_DIR` or the launch argument
+  `-PennantDevDataFolder`; the log in `PENNANT_DEV_LOG_DIR`, else `logs/` inside it); a Release build never reads
+  either. Without one a Debug build uses the release folders.
+- Tests and `#Preview`s read `contract/fixtures/` where it is, by path; `macos/Fixtures/` was not needed.
+- The String Catalog (`Pennant/Localizable.xcstrings`) holds structural labels only; `tests/stringCatalog.test.ts`
+  checks every key and translation against `tests/bannedJargon.ts`.
+
 ---
 
 ## 7. Coexistence and the way back
@@ -524,6 +600,12 @@ The rebuild is one big rewrite, but it is built so that *any* point can be aband
    `backups/pre-swiftui-<date>/`.
    - `league.db` (1.28 GB) is re-importable and isn't copied.
    - A Settings button restores the backup.
+   - *As built at N3, Stage A (`BackupManager`):* `history.db` is copied with its `-wal` and `-shm`, which with no
+     server running make a consistent database; a folder whose `server.lock` names a running process (the Electron
+     app) is not backed up then, nor recorded, and the server refuses to start there anyway. `backups/pre-swiftui.json`
+     records the backup, so it happens once per folder. A restore first moves the files it replaces (a stale `-wal`
+     included) to `backups/before-restore-<time>/`, then copies the backup back; the app stops the server before and
+     starts it after. The Settings button arrives in Stage B.
 6. **Identities:**
    - Development builds are `com.dakotawise.pennant.dev` ("Pennant Dev"), so they can sit beside anything.
    - The release app uses `com.dakotawise.pennant`. No Electron installer was ever published, so D-049's hold
@@ -559,7 +641,14 @@ The rebuild is one big rewrite, but it is built so that *any* point can be aband
     as attachments (extracted with `xcrun xcresulttool`, so no screen-recording permission is needed) and
     running **`performAccessibilityAudit`**.
 - **Fixtures:** generated by running the server against the **synthetic save** (`tests/syntheticSave.ts`) and
-  dumping the v2 responses to `macos/Fixtures/`. No private save data is ever committed.
+  dumping the v2 responses to `macos/Fixtures/`. No private save data is ever committed. *(As built at N2 and N3: the
+  responses are captured into `contract/fixtures/`, which the Swift tests and previews read in place.)*
+- *As built at N3, Stage A:* `macos/scripts/test.sh` writes the synthetic league into a scratch folder
+  (`npm run synthetic:league`), stages the server, runs every package's Swift tests (PennantKit's include the real-server
+  integration test), then `xcodebuild test` on the Pennant scheme with the app on a fresh scratch data folder, and
+  extracts the XCUITest screenshots into `build/macos-test/screenshots/`. The XCUITests need UI automation, which the
+  Mac's owner enables once (it asks for a password); until then they cannot drive the app. CI builds the app and its UI
+  tests unsigned without the server, and runs the package tests.
 - **Manual matrix per milestone:**
   - light and dark; Reduce Transparency; Increase Contrast; Reduce Motion; VoiceOver spot check;
   - window widths 900, 1280 and 1728+;

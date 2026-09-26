@@ -7,6 +7,7 @@ paths:
   - "server/serverEvents.ts"
   - "scripts/build-sidecar.mjs"
   - "scripts/fetch-node-runtime.mjs"
+  - "scripts/synthetic-league.ts"
   - "scripts/contract-build.ts"
   - "scripts/lib/contractSpec.ts"
   - "macos/**"
@@ -16,6 +17,8 @@ paths:
   - "tests/contract.test.ts"
   - "tests/apiRoutes.ts"
   - "tests/contractShapes/**"
+  - "tests/sortCases.test.ts"
+  - "tests/stringCatalog.test.ts"
 ---
 
 # Pennant for Mac (the SwiftUI rebuild): working reminder
@@ -52,5 +55,10 @@ and those documents differ, they win. The presentation cases are in `docs/BEHAVI
   PennantAPI reads the spec through a link, never a copy; `swift build && swift test` in `macos/Packages/PennantAPI`.
   Ids and counts are `Integer`; export a concrete alias of a generic, never the generic; read events through
   `ServerEventReading` (a known type that did not decode is `malformed`, never ignored).
+- **The app skeleton (N3):** `ServerController`, `AppModel`, the event client, routes, the comparator and backups live in
+  PennantKit; the server reaches the bundle through `npm run mac:stage` and the "Embed the server" build phase (the
+  repository's `node_modules` is never rebuilt for it). Run a Debug build or a test only on a scratch data folder
+  (`PENNANT_DEV_DATA_DIR`, `npm run synthetic:league`), never the real one or `data/`. SWIFTUI_REBUILD.md sections 5.2,
+  5.3 and 6, "As built at N3", have the details.
 - Verify with `macos/scripts/test.sh` plus the server baseline; visual checks come from XCUITest and
   `ImageRenderer` PNGs, not from asking the owner to look.
