@@ -97,7 +97,8 @@ struct SetupIntegrationTests {
         #expect(setup.step == .done)
         #expect(model.club?.ref == ClubRef(id: other.teamId))
         #expect(model.club?.source == .configured)
-        #expect(model.status?.configured == true)
+        // The status the event stream re-reads after the import says the save is chosen
+        #expect(await until(.seconds(10)) { model.status?.configured == true })
         #expect(!model.needsSetup)
 
         await model.shutdown()
