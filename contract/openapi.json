@@ -24,7 +24,7 @@
     "/api/config": {
       "post": {
         "operationId": "setSave",
-        "summary": "Use this save's export folder, and import it.",
+        "summary": "Use this save's export folder, and import it. Refused (409) while an import runs.",
         "tags": [
           "reused"
         ],
@@ -51,6 +51,16 @@
           },
           "400": {
             "description": "The request could not be done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409",
             "content": {
               "application/json": {
                 "schema": {
@@ -86,7 +96,7 @@
     "/api/import": {
       "post": {
         "operationId": "startImport",
-        "summary": "Import the configured save's export again; progress arrives on the event stream.",
+        "summary": "Import the configured save's export again; progress arrives on the event stream. Refused (409) while an import runs.",
         "tags": [
           "reused"
         ],
@@ -103,6 +113,16 @@
           },
           "400": {
             "description": "The request could not be done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409",
             "content": {
               "application/json": {
                 "schema": {

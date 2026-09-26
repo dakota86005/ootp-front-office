@@ -1,0 +1,22 @@
+{
+  "app": {
+    "name": "Pennant",
+    "version": "0.0.0",
+    "projectUrl": "https://github.com/dakota86005/ootp-front-office",
+    "upstreamUrl": "https://github.com/lsukev/ootp-front-office"
+  },
+  "csvExportedAt": "2040-07-01T12:00:00.000Z",
+  "configured": true,
+  "saveName": "Test League",
+  "csvDir": "/tmp/pennant-contract-home/Library/Application Support/Out of the Park Developments/OOTP Baseball 27/saved_games/Test League.lg/import_export/csv",
+  "csvDirExists": true,
+  "importing": false,
+  "importProgress": null,
+  "lastImport": null,
+  "lastError": null,
+  "importInterruptedSince": null,
+  "hasData": true,
+  "exportPending": null,
+  "logoToken": "token",
+  "ratingScaleMax": 80
+}

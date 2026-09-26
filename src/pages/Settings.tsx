@@ -324,6 +324,9 @@ export function Settings({
     try {
       await triggerImport();
       window.location.reload();
+    } catch {
+      // Refused: no save, or an import is already running. The page shows the running import after a reload
+      window.location.reload();
     } finally {
       setReimporting(false);
     }
