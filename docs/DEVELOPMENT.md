@@ -292,7 +292,10 @@ and PennantFeatures' include integration tests that start the real staged server
 then `xcodebuild test` on the Pennant scheme, each XCUITest on a fresh scratch folder of its own, and extracts the XCUITest
 screenshots into `build/macos-test/screenshots/`. The XCUITest runner is sandboxed and cannot create folders, so the
 script prepares each UI test's folder (`prepare_ui_test <test method> configured|new`: the league copied in, a pretend
-OOTP save, the save chosen or not) and passes only the root; a new UI test needs a line there.
+OOTP save, the save chosen or not) and passes only the root; a new UI test needs a line there. Screenshots are the
+app's windows only, under their test names (the scheme keeps no system attachments, and the script keeps only the
+tests' named shots), with the accessibility audit's findings in `accessibility-audit.txt`. `PENNANT_TEST_NO_PACKAGES=1`
+skips the package tests and `PENNANT_TEST_ONLY=PennantUITests/PennantUITests/<test>` runs one UI test.
 `PENNANT_TEST_NO_UI=1` skips the XCUITests; `PENNANT_TEST_UNSIGNED=1` builds unsigned. The XCUITests need UI automation,
 which the Mac's owner enables once (running the scheme's tests from Xcode asks for it). CI (`pennant-mac` in `ci.yml`)
 runs the PennantKit, PennantDesign and PennantFeatures tests and builds the app and its UI tests unsigned, without the

@@ -371,11 +371,20 @@ interface Cell { display: string; tone?: Tone; hint?: string; claimRef?: string 
   (`rosterops.ts`) and `computePitchingStaff` (`pitching.ts`) return the body or the route's refusal
   (`server/computed.ts`); each old route sends exactly that, proved byte-identical (status, content type, body) on the
   fixture league and two synthetic saves before and after, and pinned by `tests/routeExtractions.test.ts`.
-- **Scoped jargon exceptions:** `JARGON_EXCEPTIONS` in `tests/bannedJargon.ts`, one phrase on one surface with a one-line
-  reason; a v2 payload's surface is its root and first field (`catalog.glossary`), and an exception for `catalog` covers
-  the surfaces under it. The phrase is taken out before the list is applied, so the rest of the string is still checked;
-  the contract test fails on an exception no live payload uses. A claim's basis is the breakdown, held to the verdicts
-  and rendering leaks rather than the jargon list.
+- **Scoped jargon exceptions:** `JARGON_EXCEPTIONS` in `tests/bannedJargon.ts`: one phrase allowed on one department's
+  view (optionally one shown field), its case stated, with a one-line reason. A `/v2` operation places each shown
+  string on its surface (`SURFACES`: the catalog's parts, the data status; the per-view endpoint will read its path
+  parameters); an operation with no surface gets no exception. The phrase is taken out only before the jargon list;
+  verdict words are always read on the whole string, so no exception can allow one ("waiver priority" stays out). The
+  contract test fails on an exception no live payload uses. A claim's basis is the breakdown (the ⓘ popover), held to
+  the verdicts and rendering leaks rather than the jargon list.
+- **Review fixes (2026-09-26).** The basis guarantee holds at run time: `basis()` freezes and registers what it makes,
+  `claim()` refuses any other basis (a spread is a new object) and validates it again, a basis needs an evidence line
+  unless its certainty is unknown, its stamp goes with its certainty (required for calibrated, provisional and policy,
+  refused for a fact), `assertAuthored()` checks every `/v2` payload before it is sent, and the static rule catches
+  spreads, casts, annotated values and arrays, and return types. `target()` builds links. The landing folders
+  (`presentation/`, `presentation/frontOffice/`, `frontOffice/`) may reach neither `posture` nor `playoffs` nor an AI
+  module by any chain of imports.
 
 ### 4.2 Endpoints
 
@@ -402,18 +411,32 @@ is the raw message (for the log and a help tag); an unknown `/v2` route answers 
   tokens in both modes (`derivePalette` moved to `server/presentation/palette.ts`; `npm run check:theme` checks the CSS
   values and the served tokens), its logo reference when the save holds one (`/api/logo/:id?v=<token>`), its record as
   the export's standings have it ("45–38", the place in the help tag) or a sentence, the nine departments with each
-  head from the save's staff (`staff.ts` `seatHolder`: the general manager, assistant general manager, bench coach,
-  head scout and head trainer; Farm, Finance, League Office and Philosophy have no one seat and are "prepared by" their
-  staff) and a sentence where the save names nobody, never a made-up name, and the sentence for a missing value.
-- `GET /api/v2/data-status` (`DataStatusView`): the level; the headline as a `Claim` (the four source lines as its
-  evidence, the freshness reasons as "not known", the action as "would change if", certainty `fact`); the subtitle (the
-  game date in words and the headline); the game date as served and written; the four source lines as rows (why the
+  head from the club's staff table (`team_roster_staff`, the source and the names `GET /api/staff` uses: General
+  Manager for Front Office, Bench Coach for Major League Ops, Head Scout for Scouting, Team Doctor for Medical; Trades,
+  Farm, Finance, League Office and Philosophy have no seat there and are "prepared by" their staff; a provisional call
+  pending the owner) and a sentence where the save names nobody, never a made-up name, and the sentence for a missing value.
+- `GET /api/v2/data-status` (`DataStatusView`): the level; the headline as a `Claim` (the four source lines, how the
+  save was found, where Pennant looked and what the log reader said as its evidence, the freshness reasons as "not
+  known", an action in the GM's words as "would change if", certainty `fact`), shown in Settings with its basis behind
+  an ⓘ popover; the subtitle short enough for the title bar (the game date and a word or two) with the full one as
+  `subtitleHint` (the Data Status toolbar button's help tag); the game date as served and written; the four source lines as rows (why the
   log is unavailable in the help tag); every date and place as a row, a missing one saying why; the action.
 - The N3 gaps, served additively on reused routes: `ImportProgress.words` (the phase, the table named for a person, the
   progress line); `ServerStatus.importNote` and the import-finished event's `note` (why an import failed, as a sentence
   to act on with the raw message as its detail, was interrupted, or has no export folder); `POST /api/config` answers
-  `ConfigAccepted` (whether the import started, and why not); `KeyStatus.sourceText`; and the clearing rule,
+  `ConfigAccepted` (whether the import started, and why not); `KeyStatus.sourceText`; `SaveInfo.csvLastModifiedText` (every
+  served time is written one way, `server/timeWords.ts`, and Swift formats none); and the clearing rule,
   `SettingsUpdate.clubChoice: "automatic"`, which forgets the chosen club and wins over a `defaultOrgId` beside it.
+  Automatic follows the first human club by team id, and the served `organization` says how many there are and, when
+  it had to pick, which (`note`); Setup saves Automatic only when exactly one club is human.
+- A `/v2` failure's sentence is shown as the server's; a reused route's undocumented answer (a legacy 500 carries the
+  raw exception) is a failure kind in Swift, its text only in the log and the help tag.
+- The catalog serves each department's views (id and name); the sidebar shows the served names, its structural titles
+  only until the catalog arrives, and a test holds the served list to the Swift registry. The catalog reads its clubs
+  whatever columns the export has (`catalogClubs()`): without `human_team`, who runs a club is unknown (null).
+- *For N3.5:* `/api/v2/data-status` reuses `getDataStatus`, whose first read after OOTP writes the log copies
+  `text_data.sqlite3` on the request path (cached by size and time afterwards). Stage B's cache or N3.5's import work
+  should move it off the request.
 - Measured on the synthetic save (30 requests each after one warm-up): the catalog about 2 ms at 4 clubs and 3 ms at 30
   (it grows with the club count: a palette, a record and a logo check per club, 45 kB at 30 clubs); the data status
   0.3 ms (a real save's first read copies the transaction log, cached against the files' size and time after that).
@@ -971,9 +994,9 @@ the club the save's human manages as Automatic.
 **N4, Stage A is built (2026-09-26)** on `feature/swiftui-n4-presentation` (sections 4.1, 4.2 and 8, "As built at N4
 (Stage A)"); Stage B (the Front Office adapters, their cache and the claims endpoint) follows on the same branch.
 
-**Next: N4, the presentation foundation (server)** (section 9). Open a fresh session on `feature/swiftui` (after the N3
-PR merges) and say **"Continue the SwiftUI rebuild at N4 (docs/SWIFTUI_REBUILD.md)."** Branch `feature/swiftui-n4-presentation`
-from `feature/swiftui` and open its PR into `feature/swiftui`.
+**Next: N4, Stage B** (the Front Office adapters, their cache and the claims endpoint; section 9), on
+`feature/swiftui-n4-presentation`, whose PR goes into `feature/swiftui`. After N4, N5 (the design system) opens a fresh
+session on `feature/swiftui`.
 
 Read first: AGENTS.md, this document, D-001, D-008, D-018, D-020, D-043, D-046, D-049, D-052 (with its
 amendments), D-054 and D-055 to D-060.
