@@ -326,10 +326,15 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
       { name: 'cleared', body: { lgPath: '' }, status: 200 },
       { name: 'not-a-save', body: { lgPath: '/nowhere/Not A Save.lg' }, status: 400 },
     ],
-    setSave: [{ name: 'no-folder', body: {}, status: 400 }],
-    // The Setup window saves the club it picked; the second case puts the preferences back for the tests after it
+    // A save whose export is not there yet is chosen without an import, and the answer says why
+    setSave: [
+      { name: 'no-folder', body: {}, status: 400 },
+      { name: 'no-export', body: { csvDir: '$HOME/Library/Nowhere/csv', saveName: 'No Export' }, status: 200 },
+    ],
+    // The Setup window saves the club it picked, then goes back to automatic; the last case puts the preferences back
     saveSettings: [
       { name: 'club', body: { defaultOrgId: 2, theme: 'dark' }, status: 200 },
+      { name: 'automatic', body: { clubChoice: 'automatic' }, status: 200 },
       { name: 'restored', body: { defaultOrgId: null, theme: 'system' }, status: 200 },
     ],
     startImport: [{ name: 'no-save', body: undefined, status: 400 }],
@@ -338,6 +343,8 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
   it('answers every POST in the contract\'s shape, for each answer it is safe to cause here', async () => {
     const posts = operations.filter((op) => op.method === 'post');
     expect(posts.map((op) => op.operationId).sort()).toEqual(Object.keys(POSTS).sort());
+    const previous = loadConfig();
+    try {
     for (const op of posts) {
       for (const c of POSTS[op.operationId]) {
         const body = c.body === undefined ? undefined : JSON.parse(JSON.stringify(c.body).split('$HOME').join(home));
@@ -353,7 +360,14 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
         const validate = validator(type!);
         expect(validate(answer) ? [] : validate.errors, `${op.operationId} ${c.name} against ${type}`).toEqual([]);
         fixture(`responses/${op.operationId}-${c.name}.json`, json(answer));
+        if (op.operationId === 'saveSettings' && c.name === 'automatic') expect(answer.settings.defaultOrgId).toBeNull();
+        if (op.operationId === 'setSave' && c.name === 'no-export') expect(answer).toMatchObject({ importStarted: false });
+        // Choosing a save is put back at once, so the answers after it read the unconfigured server
+        if (op.operationId === 'setSave') saveConfig(previous);
       }
+    }
+    } finally {
+      saveConfig(previous);
     }
   }, SLOW);
 
@@ -460,7 +474,10 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
 
   it('holds the server to the strict form: an undescribed field or an unlisted code fails', () => {
     const status = validator('ImportProgress');
-    const good = { table: 'players', fileIndex: 1, files: 2, rows: 3, phase: 'writing' };
+    const good = {
+      table: 'players', fileIndex: 1, files: 2, rows: 3, phase: 'writing',
+      words: { phase: 'Writing the league', table: 'Players', display: 'Writing players · 1 of 2' },
+    };
     expect(status(good)).toBe(true);
     expect(status({ ...good, extra: 1 })).toBe(false);
     expect(status({ ...good, phase: 'guessing' })).toBe(false);

@@ -1,4 +1,5 @@
 {
+  "ok": true,
   "settings": {
     "provider": "anthropic",
     "models": {},
@@ -11,20 +12,7 @@
     "showUnavailablePitchers": false,
     "autoGenerateAfterImport": false,
     "defaultOrgId": null,
-    "theme": "system",
+    "theme": "dark",
     "model": "claude-opus-5"
-  },
-  "apiKey": {
-    "configured": false,
-    "source": null,
-    "sourceText": null,
-    "hint": null,
-    "encrypted": false,
-    "storageLabel": "a permission-restricted file (no OS keychain available)"
-  },
-  "dataDir": "/tmp/ootp-fo-test",
-  "organization": {
-    "id": 1,
-    "source": "human"
   }
 }

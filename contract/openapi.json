@@ -24,7 +24,7 @@
     "/api/config": {
       "post": {
         "operationId": "setSave",
-        "summary": "Use this save's export folder, and import it. Refused (409) while an import runs.",
+        "summary": "Use this save's export folder, and import it (or say why the import did not start). Refused (409) while an import runs.",
         "tags": [
           "reused"
         ],
@@ -44,7 +44,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Ok"
+                  "$ref": "#/components/schemas/ConfigAccepted"
                 }
               }
             }
@@ -495,6 +495,13 @@
               }
             ]
           },
+          "sourceText": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where the key comes from, in words (\"From the Keychain\"); null when there is no key."
+          },
           "hint": {
             "type": [
               "string",
@@ -513,6 +520,7 @@
           "encrypted",
           "hint",
           "source",
+          "sourceText",
           "storageLabel"
         ],
         "description": "The active provider's key state, with where keys are kept (`GET /api/settings`)."
@@ -908,6 +916,31 @@
           "dark"
         ],
         "description": "A club's palette in both modes."
+      },
+      "ConfigAccepted": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "importStarted": {
+            "type": "boolean"
+          },
+          "why": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the import did not start; null when it did."
+          }
+        },
+        "required": [
+          "ok",
+          "importStarted",
+          "why"
+        ],
+        "description": "What `POST /api/config` answers: the save is chosen, and whether its import began. A save whose export folder is not there yet is chosen all the same, and `why` says what to do in a sentence."
       },
       "ConfigRequest": {
         "type": "object",
@@ -1479,13 +1512,55 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "The raw error, for the log; `note` says it in words."
+          },
+          "note": {
+            "$ref": "#/components/schemas/ImportNote",
+            "description": "Why the import did not finish, in a sentence; null when it did."
           }
         },
         "required": [
           "type",
           "error"
         ]
+      },
+      "ImportNote": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "What happened: `failed` (it stopped on an error), `interrupted` (the server stopped partway), `exportMissing`.",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "failed",
+                  "interrupted",
+                  "exportMissing"
+                ]
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The raw message behind it, for the log and a help tag; never the visible line."
+          }
+        },
+        "required": [
+          "kind",
+          "text",
+          "detail"
+        ],
+        "description": "Why an import is not where the GM expects it, in a sentence, with the raw message kept for the log."
       },
       "ImportProgress": {
         "type": "object",
@@ -1519,16 +1594,20 @@
                 "type": "string"
               }
             ]
+          },
+          "words": {
+            "$ref": "#/components/schemas/ImportWords"
           }
         },
         "required": [
-          "table",
           "fileIndex",
           "files",
+          "phase",
           "rows",
-          "phase"
+          "table",
+          "words"
         ],
-        "description": "Where the import has got to, for a page that would rather not look frozen."
+        "description": "Where the import has got to, for a page that would rather not look frozen: the step, and the step in words."
       },
       "ImportProgressEvent": {
         "type": "object",
@@ -1607,6 +1686,29 @@
           "type",
           "startedAt"
         ]
+      },
+      "ImportWords": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "type": "string",
+            "description": "What the import is doing (\"Reading the export\")."
+          },
+          "table": {
+            "type": "string",
+            "description": "The table being written, named for a person (\"Standings\"); its OOTP file name stays in `table`."
+          },
+          "display": {
+            "type": "string",
+            "description": "The line a progress bar shows (\"Writing standings · 12 of 70\")."
+          }
+        },
+        "required": [
+          "phase",
+          "table",
+          "display"
+        ],
+        "description": "An import step in words (`server/presentation/importWords.ts`), for a window that shows it."
       },
       "Integer": {
         "type": "integer",
@@ -1712,6 +1814,13 @@
               }
             ]
           },
+          "sourceText": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where the key comes from, in words (\"From the Keychain\"); null when there is no key."
+          },
           "hint": {
             "type": [
               "string",
@@ -1725,6 +1834,7 @@
         "required": [
           "configured",
           "source",
+          "sourceText",
           "hint",
           "encrypted"
         ]
@@ -2683,6 +2793,10 @@
             ],
             "description": "Set when an import stopped partway (the server was stopped or crashed); cleared by the next completed import."
           },
+          "importNote": {
+            "$ref": "#/components/schemas/ImportNote",
+            "description": "Why the import is not where it should be, in a sentence (a failure, an interruption, a missing export); null when it is."
+          },
           "hasData": {
             "type": "boolean"
           },
@@ -2881,6 +2995,12 @@
       "SettingsUpdate": {
         "type": "object",
         "properties": {
+          "clubChoice": {
+            "type": "string",
+            "enum": [
+              "automatic"
+            ]
+          },
           "autoImport": {
             "type": "boolean"
           },
@@ -2966,7 +3086,7 @@
             "description": "Optional provider/model overrides for individual AI workloads.\n\nMissing entries inherit the global provider and that provider's selected model, preserving the behaviour of existing settings files."
           }
         },
-        "description": "What `POST /api/settings` takes: the preferences to change. A field left out keeps its value, and a value the handler cannot use is ignored. (Philosophy and next season's budget have routes of their own.)"
+        "description": "What `POST /api/settings` takes: the preferences to change. A field left out keeps its value, and a value the handler cannot use is ignored. (Philosophy and next season's budget have routes of their own.)\n\n`clubChoice: 'automatic'` forgets the chosen club, so the app follows the club the save's human manages (`viewingOrganization.ts`). It is the Mac app's way back to automatic: its generated client never sends an explicit null, so it cannot clear `defaultOrgId` by sending one (SWIFTUI_REBUILD.md section 4.3). It wins over a `defaultOrgId` sent beside it."
       },
       "SnapshotMeta": {
         "type": "object",

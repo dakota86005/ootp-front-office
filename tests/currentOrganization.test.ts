@@ -1,7 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import express from 'express';
+import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DATA_DIR } from '../server/config.js';
+import { settingsRoutes } from '../server/settings.js';
 import { currentOrganization, viewingOrganization } from '../server/viewingOrganization.js';
 import { IDS } from './fixture';
 
@@ -45,5 +48,36 @@ describe('the current organization', () => {
   it('is never a requested club: nothing names one here', () => {
     configure(null);
     expect(currentOrganization()?.source).not.toBe('requested');
+  });
+});
+
+describe('going back to automatic (the clearing rule, SWIFTUI_REBUILD.md section 12)', () => {
+  const post = async (body: unknown) => {
+    const app = express();
+    app.use(express.json());
+    app.use('/api', settingsRoutes);
+    const server = app.listen(0, '127.0.0.1');
+    await new Promise((resolve) => server.once('listening', resolve));
+    try {
+      const res = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/api/settings`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      return (await res.json()) as { settings: { defaultOrgId: number | null } };
+    } finally {
+      server.close();
+    }
+  };
+
+  it('forgets the chosen club with an explicit field, so the app follows the club the save\'s human manages', async () => {
+    configure(IDS.otherMlbTeam);
+    expect((await post({ clubChoice: 'automatic' })).settings.defaultOrgId).toBeNull();
+    expect(currentOrganization()).toEqual({ id: IDS.mlbTeam, source: 'human' });
+  });
+
+  it('lets the explicit field win over a club sent beside it, and leaves the club alone when it is absent', async () => {
+    configure(IDS.otherMlbTeam);
+    expect((await post({ clubChoice: 'automatic', defaultOrgId: IDS.otherMlbTeam })).settings.defaultOrgId).toBeNull();
+    configure(IDS.otherMlbTeam);
+    expect((await post({ theme: 'dark' })).settings.defaultOrgId).toBe(IDS.otherMlbTeam);
   });
 });
