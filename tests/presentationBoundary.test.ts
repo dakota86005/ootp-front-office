@@ -72,6 +72,29 @@ function handBuilt(source: string): string[] {
 
 const moduleName = (specifier: string): string => path.basename(specifier).replace(/\.(js|ts)$/, '');
 
+/**
+ * The folders whose modules the landing page (the Morning Report, the Front Office) is built from: nothing in them may
+ * reach the odds or the posture by any chain of imports (D-060), nor an AI module (D-001).
+ */
+const LANDING_FOLDERS = ['presentation', 'presentation/frontOffice', 'frontOffice'];
+const LANDING = [...new Set(LANDING_FOLDERS.flatMap((folder) => filesUnder(folder)))].sort();
+
+/** The server modules a file loads by value, directly or through others, each with the chain that reaches it. */
+function reachable(file: string): Map<string, string> {
+  const seen = new Map<string, string>();
+  const visit = (at: string, chain: string): void => {
+    if (seen.has(at)) return;
+    seen.set(at, chain);
+    for (const specifier of valueImports(at)) {
+      if (!specifier.startsWith('.')) continue;
+      const next = path.normalize(path.join(path.dirname(at), specifier)).replace(/\.js$/, '.ts');
+      if (fs.existsSync(path.join(SERVER, next))) visit(next, `${chain} → ${next}`);
+    }
+  };
+  visit(file, file);
+  return seen;
+}
+
 const RATINGS = [/players_value/, /\boa_rating\b/, /\bpot_rating\b/, /\boverall_value\b/, /\btalent_value\b/, /\bvaluesByPlayer\b/,
   /batting_ratings_/, /pitching_ratings_/, /fielding_rating/, /running_ratings_/, /\bgloves\(/];
 
@@ -88,6 +111,22 @@ describe('the presentation boundary', () => {
   it.each(BOTH)('%s imports no AI module by value', (file) => {
     const ai = valueImports(file).filter((s) => ['providers', 'ai', 'chat', 'storylines'].includes(moduleName(s)));
     expect(ai).toEqual([]);
+  });
+
+  it.each(LANDING)('%s reaches neither the postseason odds nor the deadline posture, by any chain of imports (D-060)', (file) => {
+    const reached = reachable(file);
+    expect(reached.get('posture.ts') ?? reached.get('playoffs.ts') ?? null).toBeNull();
+  });
+
+  it.each(LANDING)('%s reaches no AI module by value, by any chain of imports (D-001)', (file) => {
+    const reached = reachable(file);
+    const ai = ['providers.ts', 'ai.ts', 'chat.ts', 'storylines.ts'].map((m) => reached.get(m)).filter(Boolean);
+    expect(ai).toEqual([]);
+  });
+
+  it('covers the landing page\'s folders when they exist: presentation now, frontOffice when Stage B makes it', () => {
+    expect(LANDING_FOLDERS).toEqual(['presentation', 'presentation/frontOffice', 'frontOffice']);
+    expect(LANDING.length).toBeGreaterThan(5);
   });
 
   it.each(PRESENTATION)('%s imports neither the postseason odds nor the deadline posture (D-060)', (file) => {
