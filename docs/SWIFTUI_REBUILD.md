@@ -471,28 +471,40 @@ with scripted processes, and `ServerIntegrationTests` with the real staged serve
 - The child gets only `HOME`, `USER`, `LOGNAME`, `TMPDIR`, `LANG`, `LC_ALL`, a fixed `PATH` and the five variables. The
   app's own environment is not passed on, so a provider key exported in a shell cannot outrank the Keychain's. The
   handshake carries a fresh 64-character token and the keys read from the Keychain (`com.dakotawise.pennant.apikeys`,
-  one generic password per provider id, saving a key arrives with N13). The read is asynchronous, on a detached task,
+  one generic password per provider id; saving a key arrives with N13). The read is asynchronous, on a detached task,
   and happens before anything is spawned, so a slow Keychain delays the start but never the handshake. It is meant not
   to prompt (`interactionNotAllowed`), but that governs the data-protection keychain, while the query searches the
   login keychain, where an item whose access list does not trust the build could still show the system's dialog.
+- Before anything is spawned, every launch (the first start, Try Again from any state, a crash restart, a start after
+  a restore) passes two gates in the controller, so no caller can skip them: a development build must have a chosen
+  data folder (section 6), and the folder's first-run backup must be recorded or taken now (section 7.5). A folder
+  held by another running server with no backup yet is shown as locked and nothing starts; a backup that fails is
+  `.failed(.backupFailed)` and nothing starts.
 - Ready means `PENNANT_READY` within 30 s and then `GET /api/status` (three tries, half a second apart). No ready line
   in time, or a status that never answers, is a failure (the process is stopped), not a crash to retry: a hang does
-  not cure itself.
+  not cure itself. A server judged unusable, or being stopped, is never published as ready: a late ready line or a
+  status answer that arrives while it ends finds no launch phase to be confirmed from.
 - Exit code 3 (or `reason: "locked"`) shows the server's own sentence naming the holder, and is not retried; exit code
-  2 is a failure. Anything else is a crash: the wait doubles per crash in a row, 1 s to 30 s (a server that ran for a
+  2 is a failure; exit code 1 with a `PENNANT_FAILED` sentence is shown at once (`.startFailed`), since waiting does not
+  cure its reason. Anything else is a crash: the wait doubles per crash in a row, 1 s to 30 s (a server that ran for a
   whole two minutes starts the count again), and five crashes inside two minutes stop the restarts. Try Again forgets
   them.
-- Quit: `applicationShouldTerminate` returns `.terminateLater`, stops the server (SIGTERM, 5 s, SIGKILL) and replies. A
-  SIGTERM sent to the app quits the same way; it is started from the main run loop, not from a main-queue block,
-  because the nested run loop `.terminateLater` waits in must drain the main queue where the stop runs. When the app is
-  killed outright, the server sees stdin close and stops itself, releasing the lock (checked on a real build).
+- Quit goes only through `QuitCoordinator` (PennantKit). `applicationShouldTerminate` returns `.terminateLater`; the
+  server is stopped (SIGTERM, 5 s, SIGKILL) on a detached task and the reply is delivered through the main run loop, so
+  neither needs the main dispatch queue, which the nested run loop `.terminateLater` waits in cannot drain while it is
+  inside a main-queue job (every main-actor `Task` is one). Asking to quit (`requestQuit()`, used by the SIGTERM
+  handler and every future Quit) schedules `NSApp.terminate` on the main run loop for the same reason. A second request
+  while a reply is owed is cancelled. When the app is killed outright, the server sees stdin close and stops itself,
+  releasing the lock (checked on a real build).
 - stdout is read with a readability handler, a line at a time: `FileHandle.bytes.lines` held the ready line back until
   the pipe closed.
 - `server.log` rotates at 5 MB and keeps three older files; the token and keys are never written (the handshake is on
   stdin, which is not logged). The failure screen's Show Log opens it; the Help menu item comes with the menus.
 - The event client (`EventClient`) passes known events on, ignores a type this build has never heard of (logging it),
-  reports a known type that did not decode and re-reads `/api/status`, and reconnects a second after the stream ends
-  while the server is up.
+  reports a known type that did not decode and re-reads `/api/status` (the model keeps the latest 20 such reports),
+  and reconnects while the server is up: each failed or ended connection is logged, and the wait doubles from 1 s to
+  at most 10 s while connecting keeps failing, starting again from 1 s after a connection that opened. Cancelling it
+  (the server stopped) ends it at once.
 
 ---
 
@@ -555,14 +567,21 @@ with scripted processes, and `ServerIntegrationTests` with the real staged serve
   isolation and Approachable Concurrency; the UI-test target is `nonisolated`, XCTest's own isolation. Hardened runtime,
   no App Sandbox. `Support/Info.plist` adds only the three exported drag types to the generated Info.plist.
 - Packages: PennantAPI (N2); **PennantKit** (`ServerController`, `SidecarProtocol`, `RestartPolicy`, `ServerLog`, the
-  Keychain key source, `PennantClient`, `EventClient`, `AppModel`, `CurrentClub`, `BackupManager`, the routes,
-  `UnknownLast`, `ServedFormat`); **PennantDesign** (only `ServedColor`, a served hex colour, so far). PennantKit keeps
-  Swift's default nonisolated isolation, since it holds an actor and value types used from both sides (`AppModel` is
+  Keychain key source, `PennantClient`, `EventClient`, `AppModel`, `CurrentClub`, `BackupManager`,
+  `QuitCoordinator`, the routes, `UnknownLast`, `ServedFormat`); **PennantDesign** (only `ServedColor`, a served hex
+  colour, so far). PennantKit keeps Swift's default nonisolated isolation, since it holds an actor and value types used from both sides (`AppModel` is
   `@MainActor` by name); PennantDesign uses `MainActor` like the app. No new dependency: PennantKit names the approved
   runtime and URLSession packages directly.
-- `AppModel` holds the server's state, the status (kept current by events), settings, clubs, the current club (the
-  configured one when the club list has it, else the human-managed one, else none), the data status, the import under
-  way, and `importStamp`: the last import's finish time, which moves only when a new import lands.
+- `AppModel` holds the server's state, the status (kept current by events), settings, clubs, the current club, the
+  data status, the import under way, and `importStamp`: the last import's finish time, which moves only when a new
+  import lands. The current club is the server's: `GET /api/settings` serves `organization` (`{id, source}`, from
+  `server/viewingOrganization.ts`: the configured organization, else the human-managed one, the rule every server view
+  uses), and `CurrentClub` only finds it in `/api/orgs` for its name and colours; a configured club the list no longer
+  has stays that club, shown as not found.
+- **How stores reload (the plan for every department store):** a store keys its data on `AppModel.storeKey`
+  (`.task(id: model.storeKey)`): the import stamp, the current club and the count of backup restores. It is nil until
+  the server is ready and its settings are read, so a store loads once at launch; a new import, a club change in
+  Settings and a restore each move it. A store keeps its last good data while a reload is under way.
 - Routing: `AppRoute` (an open `DeptID` and a view id), `PlayerRef`, `ClubRef` and `ComparisonRef`, all `Codable`,
   `Hashable` and `Transferable` (as `com.dakotawise.pennant.player`, `.club` and `.comparison`).
 - The unknown-last comparator orders numbers by value and strings by UTF-16 code units (as JavaScript compares them),
@@ -570,9 +589,11 @@ with scripted processes, and `ServerIntegrationTests` with the real staged serve
   `contract/fixtures/sort-cases.json` is run by `tests/sortCases.test.ts` (a TypeScript reference) and by
   `UnknownLastTests`.
 - `ServedFormat` formats only a served count or share that has no display string (an import's progress).
-- A Debug build can be pointed at a development data folder (`PENNANT_DEV_DATA_DIR` or the launch argument
-  `-PennantDevDataFolder`; the log in `PENNANT_DEV_LOG_DIR`, else `logs/` inside it); a Release build never reads
-  either. Without one a Debug build uses the release folders.
+- A Debug build must be told its data folder (`ServerConfiguration.development`, compiled into Debug only): a scratch
+  folder (`PENNANT_DEV_DATA_DIR` or the launch argument `-PennantDevDataFolder`; the log in `PENNANT_DEV_LOG_DIR`, else
+  `logs/` inside it), or the real one on purpose (`PENNANT_DEV_USE_REAL_DATA=1` or `-PennantUseRealDataFolder YES`).
+  With neither it starts no server and says "No data folder chosen for this development build", naming both. A
+  Release build always uses the real folder.
 - Tests and `#Preview`s read `contract/fixtures/` where it is, by path; `macos/Fixtures/` was not needed.
 - The String Catalog (`Pennant/Localizable.xcstrings`) holds structural labels only; `tests/stringCatalog.test.ts`
   checks every key and translation against `tests/bannedJargon.ts`.
@@ -606,11 +627,14 @@ The rebuild is one big rewrite, but it is built so that *any* point can be aband
    - `league.db` (1.28 GB) is re-importable and isn't copied.
    - A Settings button restores the backup.
    - *As built at N3, Stage A (`BackupManager`):* `history.db` is copied with its `-wal` and `-shm`, which with no
-     server running make a consistent database; a folder whose `server.lock` names a running process (the Electron
-     app) is not backed up then, nor recorded, and the server refuses to start there anyway. `backups/pre-swiftui.json`
-     records the backup, so it happens once per folder. A restore first moves the files it replaces (a stale `-wal`
-     included) to `backups/before-restore-<time>/`, then copies the backup back; the app stops the server before and
-     starts it after. The Settings button arrives in Stage B.
+     server running make a consistent database. `ServerController` takes it before every launch, so Try Again and
+     restarts cannot skip it. A folder whose `server.lock` names a running process (the Electron app) is not backed up
+     then, nor recorded, and no server is started on it: once that app quits, Try Again backs up first. A backup that
+     fails starts no server, and its partial folder is removed. `backups/pre-swiftui.json` records the backup, so it
+     happens once per folder. A restore is all or nothing: it checks that every recorded file is in the backup and
+     readable, copies them into a staging folder inside the data folder, then moves the files it replaces (a stale
+     `-wal` included) to `backups/before-restore-<time>/` and the copies into place; any failure moves everything back.
+     The app stops the server before and starts it after. The Settings button arrives in Stage B.
 6. **Identities:**
    - Development builds are `com.dakotawise.pennant.dev` ("Pennant Dev"), so they can sit beside anything.
    - The release app uses `com.dakotawise.pennant`. No Electron installer was ever published, so D-049's hold

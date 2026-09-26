@@ -58,8 +58,10 @@ and those documents differ, they win. The presentation cases are in `docs/BEHAVI
 - **The app skeleton (N3):** `ServerController`, `AppModel`, the event client, routes, the comparator and backups live in
   PennantKit; the server reaches the bundle through `npm run mac:stage` and the "Embed the server" build phase (the
   repository's `node_modules` is never rebuilt for it). Run a Debug build or a test only on a scratch data folder
-  (`PENNANT_DEV_DATA_DIR`, `npm run synthetic:league`), never the real one or `data/`. SWIFTUI_REBUILD.md sections 5.2,
-  5.3 and 6, "As built at N3", have the details.
+  (`PENNANT_DEV_DATA_DIR`, `npm run synthetic:league`), never the real one or `data/`; a Debug build given no folder
+  starts no server. Every launch is gated on the first-run backup inside `ServerController`. The current club is
+  served (`organization` on `/api/settings`); Swift never resolves it. SWIFTUI_REBUILD.md sections 5.2, 5.3, 6 and 7.5,
+  "As built at N3", have the details.
 - **Quit only through `QuitCoordinator.requestQuit()`**, never `NSApp.terminate` from a `Task` or main-queue block (the
   `.terminateLater` wait cannot drain the main queue); `applicationShouldTerminate` answers through `shouldTerminate`.
 - Verify with `macos/scripts/test.sh` plus the server baseline; visual checks come from XCUITest and
