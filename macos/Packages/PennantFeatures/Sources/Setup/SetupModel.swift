@@ -326,12 +326,14 @@ public final class SetupModel {
         selectedClub = clubs.first { $0.teamId == served }?.teamId ?? clubs.first?.teamId
     }
 
-    /// Saves the chosen club (`POST /api/settings`), then closes the window. The club the save's human manages is saved
-    /// as Automatic (`clubChoice`), so the app follows him if he takes another job in the save; any other club is saved
-    /// by its id.
+    /// Saves the chosen club (`POST /api/settings`), then closes the window. When the save's human manages exactly one
+    /// club and that is the one chosen, it is saved as Automatic (`clubChoice`), so the app follows him if he takes
+    /// another job in the save. With several human clubs, Automatic would follow only the first, so any choice there
+    /// (and any other club) is saved by its id.
     public func saveClub() async {
         guard let club = selectedClub else { return }
-        let automatic = clubs.first { $0.teamId == club }?.isHuman == true
+        let human = clubs.filter(\.isHuman)
+        let automatic = human.count == 1 && human.first?.teamId == club
         guard let client = client() else {
             clubProblem = .notRunning
             return

@@ -979,11 +979,24 @@
                 "type": "string"
               }
             ]
+          },
+          "humanClubs": {
+            "$ref": "#/components/schemas/Integer",
+            "description": "How many clubs the save's human manages (automatic follows the first, by team id)."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When automatic had to pick among several human clubs, which one it follows and why, in a sentence; else null."
           }
         },
         "required": [
           "id",
-          "source"
+          "source",
+          "humanClubs",
+          "note"
         ],
         "description": "The club the app is about when nothing names one: the configured organization, else the one the save's human manages; null when neither is known. A configured id is taken as configured even when the club list no longer has it (the server's rule for every view), so a client shows that club as not found rather than quietly switching clubs."
       },

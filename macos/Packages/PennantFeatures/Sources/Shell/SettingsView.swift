@@ -145,13 +145,20 @@ struct GeneralSettings: View {
                         }
                     }
                 )) {
-                    Text("Automatic").tag(Int?.none)
-                    Divider()
+                    // Automatic follows the club the save's human manages; with none, it would leave the app with no club
+                    if (model.settings?.organization?.humanClubs ?? 0) > 0 {
+                        Text("Automatic").tag(Int?.none)
+                        Divider()
+                    }
                     ForEach(model.orgs, id: \.teamId) { org in
                         Text(verbatim: org.label).tag(Optional(org.teamId))
                     }
                 }
                 .accessibilityIdentifier("settings.club")
+                if let note = model.settings?.organization?.note {
+                    Label { Text(verbatim: note) } icon: { Image(systemName: "info.circle") }
+                        .foregroundStyle(.secondary)
+                }
                 if let clubProblem { ProblemLine(clubProblem) }
             } header: {
                 Text("Club")

@@ -151,6 +151,22 @@ struct SetupModelTests {
         #expect(model.step == .done)
     }
 
+    @Test("with several human clubs, the chosen one is saved by its id: Automatic would follow only the first")
+    func severalHumanClubs() async throws {
+        let orgs = try String(contentsOf: PreviewFixtures.responses.appending(path: "listOrgs.json"), encoding: .utf8)
+        // Every club in the captured list, made human
+        server.answer("listOrgs", (200, orgs.replacingOccurrences(of: "\"isHuman\": false", with: "\"isHuman\": true")))
+        let model = makeModel()
+        await model.loadClubs()
+        #expect(model.clubs.filter(\.isHuman).count > 1)
+        let second = try #require(model.clubs.filter(\.isHuman).last)
+        model.selectedClub = second.teamId
+        await model.saveClub()
+        let body = try #require(server.bodies(of: "saveSettings").first)
+        #expect(body["defaultOrgId"] as? Int == second.teamId)
+        #expect(body["clubChoice"] == nil)
+    }
+
     @Test("the club the save's human manages is saved as Automatic, so the app follows him; any other by its id")
     func humanClubIsAutomatic() async throws {
         let model = makeModel()

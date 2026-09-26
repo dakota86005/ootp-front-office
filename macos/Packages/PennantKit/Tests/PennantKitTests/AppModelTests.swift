@@ -165,7 +165,7 @@ struct CurrentClubTests {
 
     @Test("a configured club the list does not have stays the served club, never swapped for the human-managed one")
     func configuredNotInList() throws {
-        let club = CurrentClub.from(served: try served(#"{"id":999,"source":"configured"}"#), orgs: try orgs())
+        let club = CurrentClub.from(served: try served(#"{"id":999,"source":"configured","humanClubs":1,"note":null}"#), orgs: try orgs())
         #expect(club?.ref == ClubRef(id: 999))
         #expect(club?.source == .configured)
         #expect(club?.org == nil)
@@ -173,14 +173,14 @@ struct CurrentClubTests {
 
     @Test("a configured club in the list is found there")
     func configured() throws {
-        let club = CurrentClub.from(served: try served(#"{"id":3,"source":"configured"}"#), orgs: try orgs())
+        let club = CurrentClub.from(served: try served(#"{"id":3,"source":"configured","humanClubs":1,"note":null}"#), orgs: try orgs())
         #expect(club?.org?.label == "Club 3 N")
     }
 
     @Test("no served club is no club, never a guess; a newer source is kept as it came")
     func noneOrNewer() throws {
         #expect(CurrentClub.from(served: nil, orgs: try orgs()) == nil)
-        let club = CurrentClub.from(served: try served(#"{"id":2,"source":"commissioner"}"#), orgs: try orgs())
+        let club = CurrentClub.from(served: try served(#"{"id":2,"source":"commissioner","humanClubs":0,"note":null}"#), orgs: try orgs())
         #expect(club?.source == .other("commissioner"))
     }
 }
