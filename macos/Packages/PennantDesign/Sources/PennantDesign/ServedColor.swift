@@ -17,7 +17,7 @@ public enum ServedColor {
     }
 
     /// The colour, or nil when the served string is not one.
-    public static func color(_ hex: String?) -> Color? {
+    public nonisolated static func color(_ hex: String?) -> Color? {
         components(hex).map { Color(.sRGB, red: $0.red, green: $0.green, blue: $0.blue) }
     }
 }
