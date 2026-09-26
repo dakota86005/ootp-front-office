@@ -207,7 +207,7 @@ struct PennantAPITests {
         let catalog = try await jsonClient("getCatalog").getCatalog().ok.body.json
         #expect(catalog.glossary.contains { $0.display == "OPS+" })
         #expect(catalog.stats.contains { $0.key == "era" && $0.lowerIsBetter && $0.format.value1 == .dec2 })
-        let club = try #require(catalog.clubs.first { $0.isHuman })
+        let club = try #require(catalog.clubs.first { $0.isHuman == true })
         #expect(club.palette.dark.accent.hasPrefix("#"))
         #expect(club.record.display == "15–15")
         #expect(club.logo == nil)

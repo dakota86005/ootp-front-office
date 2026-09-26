@@ -693,8 +693,11 @@
             "type": "string"
           },
           "isHuman": {
-            "type": "boolean",
-            "description": "The club the save's human manages."
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "The save's human runs the club; null when the export does not say."
           },
           "palette": {
             "$ref": "#/components/schemas/ClubPalettes"

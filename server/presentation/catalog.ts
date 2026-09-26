@@ -55,8 +55,8 @@ export interface ClubPalettes {
 export interface CatalogClub {
   teamId: Integer;
   name: string;
-  /** The club the save's human manages. */
-  isHuman: boolean;
+  /** The save's human runs the club; null when the export does not say. */
+  isHuman: boolean | null;
   palette: ClubPalettes;
   /** Where to fetch the logo (`/api/logo/:teamId?v=…`), or null when the save holds none. */
   logo: string | null;
@@ -146,11 +146,11 @@ const ordinal = (n: number): string => {
   return `${n}${suffix}`;
 };
 
-/** The clubs the catalog describes: the major-league clubs as `/api/orgs` lists them. */
+/** The clubs the catalog describes: the major-league clubs (`catalogClubs()` in `org.ts`). */
 export interface ClubSource {
   team_id: number;
   label: string;
-  isHuman: boolean;
+  isHuman: boolean | null;
   colors: TeamColors;
 }
 

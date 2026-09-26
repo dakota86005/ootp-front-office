@@ -10,7 +10,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import type { ApiError } from './api.js';
 import { getDataStatus } from './dataStatus.js';
-import { majorLeagueClubs } from './org.js';
+import { catalogClubs } from './org.js';
 import { importedAt } from './playerStateRoutes.js';
 import { buildCatalog, type Catalog } from './presentation/catalog.js';
 import { assertAuthored } from './presentation/claim.js';
@@ -30,7 +30,7 @@ function send<T>(res: Response<T>, payload: T): void {
 
 /** What the app draws on: glossary, stat catalog, club palettes, logos and records, departments and their heads. */
 v2Routes.get('/catalog', (_req, res: Response<Catalog>) => {
-  send(res, buildCatalog(majorLeagueClubs(), currentOrganization()?.id ?? null));
+  send(res, buildCatalog(catalogClubs(), currentOrganization()?.id ?? null));
 });
 
 /** How current the data is, in words. */

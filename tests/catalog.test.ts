@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { db } from '../server/db.js';
 import { loadConfig, saveConfig } from '../server/config.js';
-import { majorLeagueClubs } from '../server/org.js';
+import { catalogClubs, majorLeagueClubs } from '../server/org.js';
 import { buildCatalog, servedDepartments, servedGlossary, servedStats } from '../server/presentation/catalog.js';
 import { REACT_ONLY_TERMS } from '../server/presentation/glossary.js';
 import { clubPalette, derivePalette, toHex } from '../server/presentation/palette.js';
@@ -179,6 +179,27 @@ describe('each club\'s record and logo', () => {
       expect(clubs.filter((c) => c.teamId !== IDS.mlbTeam).every((c) => c.logo === null)).toBe(true);
     } finally {
       db.exec('ALTER TABLE teams DROP COLUMN logo_file_name');
+    }
+  });
+});
+
+describe('a club list without every column (review N1)', () => {
+  it('serves the catalog from a teams table without nickname or human_team: the name alone, who runs it unknown', () => {
+    const cols = ['nickname', 'human_team', 'human_id'].filter((c) => (db.prepare('PRAGMA table_info(teams)').all() as Array<{ name: string }>).some((r) => r.name === c));
+    const saved = db.prepare(`SELECT team_id, ${cols.join(', ')} FROM teams`).all() as Array<Record<string, unknown>>;
+    for (const c of cols) db.exec(`ALTER TABLE teams DROP COLUMN ${c}`);
+    try {
+      const clubs = catalogClubs();
+      expect(clubs.length).toBeGreaterThan(0);
+      for (const club of clubs) expect(club.isHuman).toBeNull();
+      const catalog = buildCatalog(clubs, IDS.mlbTeam);
+      expect(catalog.clubs.find((c) => c.teamId === IDS.mlbTeam)?.name).toBe((db.prepare('SELECT name FROM teams WHERE team_id = ?').get(IDS.mlbTeam) as { name: string }).name);
+      expect(catalog.glossary.length).toBeGreaterThan(0);
+    } finally {
+      for (const c of cols) db.exec(`ALTER TABLE teams ADD COLUMN ${c} ${c === 'nickname' ? 'TEXT' : 'INTEGER DEFAULT 0'}`);
+      for (const row of saved) {
+        db.prepare(`UPDATE teams SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE team_id = ?`).run(...cols.map((c) => row[c] as never), row.team_id as never);
+      }
     }
   });
 });
