@@ -53,7 +53,12 @@ const TEAM_COLOR_COLUMNS = {
  * served as null (unknown), never a stand-in colour.
  */
 orgRoutes.get('/orgs', (_req, res: Response<Org[]>) => {
-  if (!tableExists('teams')) return res.json([]);
+  res.json(majorLeagueClubs());
+});
+
+/** The major-league clubs as `GET /api/orgs` lists them (the Mac app's catalog reads the same list). */
+export function majorLeagueClubs(): Org[] {
+  if (!tableExists('teams')) return [];
   const present = new Set(tableColumns('teams'));
   const colors = Object.entries(TEAM_COLOR_COLUMNS)
     .map(([key, column]) => (present.has(column) ? `${column} AS ${key}` : `NULL AS ${key}`))
@@ -67,15 +72,13 @@ orgRoutes.get('/orgs', (_req, res: Response<Org[]>) => {
     team_id: number; name: string; nickname: string; human_team: number;
     bg: string | null; fg: string | null; secondary: string | null; cap: string | null;
   }>;
-  res.json(
-    rows.map((r) => ({
-      team_id: r.team_id,
-      label: r.name === r.nickname ? r.name : `${r.name} ${r.nickname}`,
-      isHuman: r.human_team === 1,
-      colors: { bg: r.bg, fg: r.fg, secondary: r.secondary, cap: r.cap },
-    }))
-  );
-});
+  return rows.map((r) => ({
+    team_id: r.team_id,
+    label: r.name === r.nickname ? r.name : `${r.name} ${r.nickname}`,
+    isHuman: r.human_team === 1,
+    colors: { bg: r.bg, fg: r.fg, secondary: r.secondary, cap: r.cap },
+  }));
+}
 
 /** The column signings nobody has assigned yet are gathered under. */
 const UNASSIGNED_TEAM = -1;

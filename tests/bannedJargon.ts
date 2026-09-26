@@ -66,7 +66,10 @@ export interface JargonException {
   reason: string;
 }
 
-export const JARGON_EXCEPTIONS: readonly JargonException[] = [];
+export const JARGON_EXCEPTIONS: readonly JargonException[] = [
+  { surface: 'catalog.glossary', phrase: 'PCT', reason: 'The standings column is PCT in OOTP and every box score; the glossary is where it is explained.' },
+  { surface: 'catalog', phrase: 'Fielding Independent Pitching', reason: "FIP's own name, spelled out where the statistic is explained." },
+];
 
 /** The surface root of each `/v2` operation's payload (its operationId otherwise). */
 export const SURFACE_ROOTS: Readonly<Record<string, string>> = { getCatalog: 'catalog' };

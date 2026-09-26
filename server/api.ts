@@ -56,6 +56,7 @@ import { farmRoutes } from './farmRoutes.js';
 import { appInfo, type AppInfo } from './appInfo.js';
 import { scoutedDevelopmentRoutes } from './scoutedDevelopment.js';
 import { eventStream, progressThrottle, publish } from './serverEvents.js';
+import { v2Routes } from './v2Routes.js';
 import type { Integer } from './contract/primitives.js';
 
 export const api = Router();
@@ -403,7 +404,10 @@ export interface Ok {
 
 /** What a route answers when it cannot do what was asked (a 400). */
 export interface ApiError {
+  /** What went wrong, as a sentence. */
   error: string;
+  /** The raw message behind it, for the log and a help tag (a `/v2` route's failure); never the visible line. */
+  detail?: string;
 }
 
 /** What `POST /api/import` answers: the import has started; its progress and result arrive on `/api/status` and the event stream. */
@@ -476,6 +480,9 @@ api.get('/status', (_req, res: Response<ServerStatus>) => {
 
 /** Server-sent events for the Mac app: import, job and fresh-export news as it happens (`serverEvents.ts`). */
 api.get('/v2/events', eventStream(statusSnapshot));
+
+/** The rest of the Mac app's own API (`v2Routes.ts`), after the event stream so its unknown-route answer is last. */
+api.use('/v2', v2Routes);
 
 /**
  * What `POST /api/config` and `POST /api/import` answer (409) while an import is running. Choosing a save used to clear

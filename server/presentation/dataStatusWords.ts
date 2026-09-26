@@ -1,0 +1,197 @@
+/**
+ * The data status in words (`GET /api/v2/data-status`): the React panel's lines (`src/dataStatusModel.ts`) ported to the
+ * server, plus what the Mac app's shell wanted to say at N3 and could not (SWIFTUI_REBUILD.md section 12): the level, each
+ * source's state and lag, why the transaction log is unavailable, how the save was found, a display form of every date,
+ * and a sentence wherever a value is missing. It reads the same `DataStatus` `/api/data-status` serves and decides
+ * nothing new: every state and lag is the freshness model's (`dataFreshness.ts`, D-022).
+ *
+ * The React panel keeps its own copy (`src/dataStatusModel.ts`) until cutover: the Mac app's words are plainer in two places
+ * (the headline says what the level means instead of naming it, and dates spell the month), so the two are not held to
+ * the same strings; both read the same states and lags.
+ */
+import type { Cell, Claim, Row, Tone } from '../contract/presentation.js';
+import { gameDateWords, type DataStatus } from '../dataStatus.js';
+import { parseGameDate, type GameDate, type RosterEvidenceLevel } from '../dataFreshness.js';
+import type { SaveDiscoveryMethod } from '../ootpSave.js';
+import { basis, cell, claim, row } from './claim.js';
+
+/** A game date as served (unpadded, as OOTP writes it, or null) and as the app shows it. */
+export interface GameDateText {
+  served: GameDate | null;
+  display: string;
+}
+
+/** One line of the data status: a source ("League data") and its state ("Behind by 2 days"). */
+export interface DataStatusRow extends Row<'source' | 'state'> {}
+/** One fact of the data status: what it is ("Game date") and its value ("May 15, 2026"), or why it is missing. */
+export interface DataStatusFact extends Row<'label' | 'value'> {}
+
+export interface DataStatusView {
+  /** The freshness model's level, for the symbol beside the headline (`current`, `partial`, `stale`, `unavailable`). */
+  level: RosterEvidenceLevel;
+  /** The headline, with the reasons and what would change it in its basis. */
+  headline: Claim;
+  /** The window's subtitle: the game date and the headline, joined ("May 15, 2026 · Up to date"). */
+  subtitle: string;
+  gameDate: GameDateText;
+  /** League data, transactions, the OOTP save and roster evidence. */
+  sources: DataStatusRow[];
+  /** Dates and places, every one present: a missing value says why. */
+  facts: DataStatusFact[];
+  /** What to do about it, when there is something to do. */
+  action: Cell | null;
+}
+
+const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** An OOTP game date (padded or not) in words; null stays null. */
+export function gameDateDisplay(raw: string | null | undefined): string | null {
+  const parsed = parseGameDate(raw);
+  return parsed ? gameDateWords(parsed) : null;
+}
+
+/** A served ISO timestamp (an export's or an import's time) as a reader's date and time, in the server's own time zone. */
+export function timestampDisplay(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return null;
+  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(at);
+}
+
+/** How the save was found, in words. */
+export const DISCOVERY_WORDS: Record<SaveDiscoveryMethod, string> = {
+  csv_layout: 'Found from the export\'s folder',
+  ancestor_lg: 'Found in a folder above the export',
+  save_name_match: 'Found by the save\'s name',
+  manual_override: 'Named by hand in Settings',
+  not_found: 'Not found',
+};
+
+/** Why the transaction log cannot be read, in words. */
+function logUnavailableWords(status: DataStatus): string {
+  const code = status.transactionLog.error?.code;
+  if (code === 'torn') return 'OOTP was writing it; Pennant tries again shortly';
+  if (code === 'invalid') return 'The save\'s log isn\'t one Pennant can read';
+  if (code === 'copy_failed') return 'Pennant couldn\'t copy it to read';
+  switch (status.freshness.log.unavailableReason ?? status.transactionLog.unavailableReason) {
+    case 'save_not_found':
+      return 'The save\'s folder wasn\'t found';
+    case 'database_missing':
+      return 'The save has no transaction log yet';
+    default:
+      return 'It couldn\'t be read';
+  }
+}
+
+type Line = { id: string; source: string; state: string; tone: Tone; hint?: string; order: number };
+
+/** The four lines, as the React panel's `statusRows` has them, with why the log is unavailable in its help tag. */
+function sourceLines(s: DataStatus): Line[] {
+  const f = s.freshness;
+  const day = (iso: string | null) => gameDateDisplay(iso) ?? 'an unknown date';
+  const league: Line =
+    f.csv.state === 'current'
+      ? { id: 'league', source: 'League data', state: 'Current', tone: 'good', order: 0 }
+      : f.csv.state === 'behind'
+        ? { id: 'league', source: 'League data', state: `Behind by ${plural(f.csv.lagDays, 'day')}`, tone: 'bad', order: f.csv.lagDays }
+        : f.csv.state === 'unavailable'
+          ? { id: 'league', source: 'League data', state: 'Not imported', tone: 'bad', order: -1 }
+          : { id: 'league', source: 'League data', state: 'Not checked against the save', tone: 'caution', order: -2 };
+
+  const log = s.transactionLog;
+  const transactions: Line = !log.readable
+    ? {
+        id: 'transactions',
+        source: 'Transactions',
+        state: s.save.found ? 'Unavailable' : 'Unavailable: save not found',
+        tone: 'caution',
+        hint: logUnavailableWords(s),
+        order: -1,
+      }
+    : f.log.state === 'behind'
+      ? { id: 'transactions', source: 'Transactions', state: `Through ${day(f.log.through)} (${plural(f.log.lagDays, 'day')} behind)`, tone: 'caution', order: f.log.lagDays }
+      : { id: 'transactions', source: 'Transactions', state: `Through ${day(f.log.through)}`, tone: 'good', order: 0 };
+
+  const save: Line = {
+    id: 'save',
+    source: 'OOTP save',
+    state: s.save.simulatedThrough ? `Through ${day(s.save.simulatedThrough)}` : s.save.found ? 'Date unreadable' : 'Not found',
+    tone: s.save.simulatedThrough ? 'neutral' : 'caution',
+    order: 0,
+  };
+
+  const evidence: Line = {
+    id: 'evidence',
+    source: 'Roster evidence',
+    state: HEADLINES[f.level](s),
+    tone: f.level === 'current' ? 'good' : f.level === 'partial' ? 'caution' : 'bad',
+    order: 0,
+  };
+  return [league, transactions, save, evidence];
+}
+
+/** The headline for each level, in the GM's words, from the freshness model's own states and lags. */
+const HEADLINES: Record<RosterEvidenceLevel, (s: DataStatus) => string> = {
+  current: () => 'Up to date',
+  stale: (s) => `League data is ${plural(s.freshness.csv.lagDays, 'day')} behind the save`,
+  partial: (s) =>
+    s.freshness.log.state === 'behind'
+      ? `Transactions ${plural(s.freshness.log.lagDays, 'day')} behind`
+      : s.freshness.log.state === 'unavailable'
+        ? 'Transaction history unavailable'
+        : 'Not checked against the save',
+  unavailable: () => 'No league data imported yet',
+};
+
+const HEADLINE_TONE: Record<RosterEvidenceLevel, Tone> = { current: 'good', partial: 'caution', stale: 'bad', unavailable: 'bad' };
+
+function fact(id: string, label: string, value: string | null, missing: string, hint?: string): DataStatusFact {
+  return row(
+    id,
+    { label: cell(label), value: value ? cell(value, hint ? { hint } : {}) : cell(missing, { tone: 'unknown' }) },
+    { label, value: value ?? null },
+  );
+}
+
+/** The data status in words. */
+export function dataStatusView(s: DataStatus): DataStatusView {
+  const level = s.freshness.level;
+  const lines = sourceLines(s);
+  const headlineText = HEADLINES[level](s);
+  const gameDate = gameDateDisplay(s.csv.currentDate);
+  const headline = claim({
+    text: headlineText,
+    tone: HEADLINE_TONE[level],
+    hint: 'How current Pennant\'s copy of the league is against your OOTP save',
+    basis: basis({
+      because: lines.map((l) => ({ label: l.source, value: l.state })),
+      source: { department: 'frontOffice', specialist: 'Data status', asOf: s.csv.importedAt, gameDate: s.csv.currentDate },
+      unknown: s.freshness.reasons,
+      wouldChange: s.freshness.action ? [s.freshness.action] : [],
+      lean: null,
+      certainty: 'fact',
+    }),
+  });
+
+  const noImport = 'Not imported yet';
+  const facts: DataStatusFact[] = [
+    fact('gameDate', 'Game date', gameDate, noImport),
+    fact('importedThrough', 'Imported data through', gameDateDisplay(s.csv.simulatedThrough), noImport),
+    fact('saveThrough', 'Save through', gameDateDisplay(s.save.simulatedThrough), s.save.found ? 'Date unreadable' : 'Save not found'),
+    fact('exported', 'Exported', timestampDisplay(s.csv.exportedAt), s.configured ? 'Export not found' : 'No save chosen'),
+    fact('imported', 'Imported', timestampDisplay(s.csv.importedAt), noImport),
+    fact('saveFolder', 'Save folder', s.save.lgPath, DISCOVERY_WORDS.not_found, s.save.lgPath ? DISCOVERY_WORDS[s.save.discovery] : undefined),
+  ];
+
+  return {
+    level,
+    headline,
+    subtitle: [gameDate, headlineText].filter((p): p is string => !!p).join(' · '),
+    gameDate: { served: s.csv.currentDate, display: gameDate ?? noImport },
+    sources: lines.map((l) =>
+      row(l.id, { source: cell(l.source), state: cell(l.state, { tone: l.tone, ...(l.hint ? { hint: l.hint } : {}) }) }, { source: l.source, state: l.order }),
+    ),
+    facts,
+    action: s.freshness.action ? cell(s.freshness.action) : null,
+  };
+}

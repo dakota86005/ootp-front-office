@@ -1,4 +1,4 @@
-import { db, tableExists } from './db.js';
+import { db, tableColumns, tableExists } from './db.js';
 
 /**
  * The people you can talk to, read out of the save rather than invented.
@@ -495,4 +495,35 @@ export function personaBrief(p: Persona, orgId: number): string {
     );
   }
   return lines.join('\n');
+}
+
+/**
+ * The seats a department head sits in (SWIFTUI_REBUILD.md section 3.5), and where the save records each: the club's
+ * staff table (`team_roster_staff`) names the general manager, the bench coach and the head scout; the coaches table's
+ * occupation codes established above name the general manager, the assistant general manager and the training room.
+ * A seat the save does not fill is unknown: never a made-up name.
+ */
+export type HeadSeat = 'generalManager' | 'assistantGm' | 'benchCoach' | 'headScout' | 'headTrainer';
+
+const SEAT_SOURCES: Record<HeadSeat, { staffColumn: string | null; occupation: number | null }> = {
+  generalManager: { staffColumn: 'general_manager', occupation: OCCUPATION.gm },
+  assistantGm: { staffColumn: null, occupation: OCCUPATION.assistantGm },
+  benchCoach: { staffColumn: 'bench_coach', occupation: null },
+  headScout: { staffColumn: 'head_scout', occupation: null },
+  headTrainer: { staffColumn: null, occupation: OCCUPATION.trainer },
+};
+
+/** Who sits in a seat at the organization, as the save records it; null when the save names nobody there. */
+export function seatHolder(orgId: number, seat: HeadSeat): { coachId: number; name: string } | null {
+  if (!tableExists('coaches')) return null;
+  const source = SEAT_SOURCES[seat];
+  let coach: Coach | null = null;
+  if (source.staffColumn && tableExists('team_roster_staff') && tableColumns('team_roster_staff').includes(source.staffColumn)) {
+    const row = db.prepare(`SELECT ${source.staffColumn} AS id FROM team_roster_staff WHERE team_id = ?`).get(orgId) as { id: number | null } | undefined;
+    if (row?.id) coach = (db.prepare(`SELECT * FROM coaches WHERE coach_id = ?`).get(row.id) as Coach | undefined) ?? null;
+  }
+  if (!coach && source.occupation !== null) coach = loadCoach(orgId, source.occupation);
+  if (!coach) return null;
+  const name = `${coach.first_name ?? ''} ${coach.last_name ?? ''}`.trim();
+  return name ? { coachId: Number(coach.coach_id), name } : null;
 }

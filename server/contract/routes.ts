@@ -55,6 +55,22 @@ export const operations: Operation[] = [
     stream: true,
     reused: false,
   },
+  {
+    operationId: 'getCatalog',
+    method: 'get',
+    path: '/api/v2/catalog',
+    summary: 'The glossary, the stat catalog, each club\'s palette, logo and record, and the departments with their heads.',
+    response: 'Catalog',
+    reused: false,
+  },
+  {
+    operationId: 'getDataStatusWords',
+    method: 'get',
+    path: '/api/v2/data-status',
+    summary: 'How current the data is, in words: the headline with its basis, each source\'s line, the dates and places.',
+    response: 'DataStatusView',
+    reused: false,
+  },
 
   // ── Status and import (reused) ──────────────────────────────────────────
   {

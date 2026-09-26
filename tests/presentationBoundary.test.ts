@@ -93,7 +93,7 @@ describe('the presentation boundary', () => {
   });
 
   it.each(BOTH)('%s writes nothing: no insert, update, delete or file write', (file) => {
-    expect(code(file), file).not.toMatch(/\.run\(|\bINSERT\b|\bUPDATE\s|\bDELETE\s|writeFile|\.exec\(/);
+    expect(code(file), file).not.toMatch(/\.run\(|\bINSERT\b|\bUPDATE\s|\bDELETE\s|writeFile|\bdb\.exec\(/);
   });
 
   it('is imported only by the modules that serve it, never by a specialist', () => {

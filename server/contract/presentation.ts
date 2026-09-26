@@ -6,8 +6,10 @@
  * Author claims through `claim()` and `basis()` in `server/presentation/claim.ts`, never as object literals: the builder
  * makes a claim without a basis impossible to write, and keeps "not known" a list of sentences (D-018).
  *
- * The contract generator cannot name a generic (`Row<K>`), so a payload exports a concrete alias of each row it serves
- * (`export type DataStatusRow = Row<'source' | 'state'>`), which becomes one named component.
+ * The contract generator cannot name a generic (`Row<K>`), so a payload exports a concrete interface for each row it
+ * serves, extending it with its columns (`export interface DataStatusRow extends Row<'source' | 'state'> {}`), which
+ * becomes one named component. (A type alias of an exported generic would name the instantiation, `Row<…>`, which is
+ * no component name.)
  */
 import type { GameDate } from '../dataFreshness.js';
 import type { Integer } from './primitives.js';
@@ -152,7 +154,7 @@ export interface Cell {
 /**
  * One row of a served table (SWIFTUI_REBUILD.md section 4.1): a cell per column, the raw sort key per column (null is
  * unknown and sorts last in both directions, `contract/fixtures/sort-cases.json`), and a claim when the row has a basis.
- * Generic over its columns; a payload exports a concrete alias.
+ * Generic over its columns; a payload exports a concrete interface extending it.
  */
 export interface Row<K extends string = string> {
   id: string;
