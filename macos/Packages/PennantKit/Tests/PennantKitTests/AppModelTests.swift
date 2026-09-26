@@ -47,7 +47,7 @@ struct AppModelTests {
         #expect(model.club?.ref == ClubRef(id: 1))
         #expect(model.club?.org?.label == "Club 1 N")
         #expect(model.club?.source == .humanManaged)
-        #expect(model.dataStatus?.subtitle == "May 6, 2040 · Transaction history unavailable")
+        #expect(model.dataStatus?.subtitle == "May 6, 2040 · No log")
         #expect(model.catalogClub?.record.display == "15–15")
         #expect(transport.paths.contains("/api/v2/events"))
         await model.shutdown()

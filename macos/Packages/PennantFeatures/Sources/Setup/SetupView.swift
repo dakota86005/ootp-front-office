@@ -43,6 +43,8 @@ public struct SetupView: View {
         .onChange(of: model.step) { _, step in
             if step == .done { dismissWindow(id: SceneID.setup) }
         }
+        // A container, so the window's id does not replace its controls' own (the Save Club button's, in the inset)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("setup")
     }
 }

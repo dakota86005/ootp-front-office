@@ -25,6 +25,11 @@ public struct SidebarView: View {
 
     public var body: some View {
         List(selection: $window.selection) {
+            // The club card is the list's first row (no tag, so it is never selected): it scrolls with the departments
+            // and nothing ever draws beneath it
+            SidebarClubCard()
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 6, trailing: 0))
+                .listRowSeparator(.hidden)
             ForEach(window.registry.departments) { department in
                 let served = model.catalog?.departments.first { $0.id.value2 == department.id.rawValue || $0.id.value1?.rawValue == department.id.rawValue }
                 DisclosureGroup(isExpanded: window.isExpanded(department.id)) {
@@ -37,7 +42,7 @@ public struct SidebarView: View {
                                 Text(view.title)
                             }
                         } icon: {
-                            Image(systemName: view.symbol)
+                            SidebarSymbol(name: view.symbol)
                         }
                         .tag(department.route(to: view))
                         .accessibilityIdentifier("sidebar.\(department.id.rawValue).\(view.id)")
@@ -46,7 +51,7 @@ public struct SidebarView: View {
                     Label {
                         if let name = served?.name { Text(verbatim: name) } else { Text(department.title) }
                     } icon: {
-                        Image(systemName: department.symbol)
+                        SidebarSymbol(name: department.symbol)
                     }
                     .badge(department.badge(from: model) ?? 0)
                     .accessibilityIdentifier("sidebar.\(department.id.rawValue)")
@@ -54,12 +59,22 @@ public struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            SidebarClubCard()
-                .padding(.horizontal, 10)
-                .padding(.bottom, 6)
-        }
         .accessibilityIdentifier("sidebar")
+    }
+}
+
+/// A sidebar row's symbol in a fixed box, scaled to fit it, so a wide symbol (three people, a diamond) never runs into
+/// its title.
+struct SidebarSymbol: View {
+    let name: String
+
+    var body: some View {
+        Image(systemName: name)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 18, height: 16)
+            .frame(width: 22)
+            .accessibilityHidden(true)
     }
 }
 

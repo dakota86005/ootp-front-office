@@ -75,7 +75,8 @@ struct SubtitleTests {
     func served() throws {
         let data = try Data(contentsOf: PreviewFixtures.responses.appending(path: "getDataStatusWords.json"))
         let status = try JSONDecoder().decode(Components.Schemas.DataStatusView.self, from: data)
-        #expect(ServedText.subtitle(dataStatus: status) == "May 6, 2040 · Transaction history unavailable")
+        #expect(ServedText.subtitle(dataStatus: status) == "May 6, 2040 · No log")
+        #expect(status.subtitleHint == "May 6, 2040 · Transaction history unavailable")
     }
 
     @Test("is nothing before the data status arrives")

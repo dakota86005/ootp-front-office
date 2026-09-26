@@ -1277,7 +1277,11 @@
           },
           "subtitle": {
             "type": "string",
-            "description": "The window's subtitle: the game date and the headline, joined (\"May 15, 2026 · Up to date\")."
+            "description": "The window's subtitle, short enough for the title bar: the game date and a word or two (\"May 15, 2026 · Log behind\")."
+          },
+          "subtitleHint": {
+            "type": "string",
+            "description": "The subtitle in full, for its help tag: the game date and the headline (\"May 15, 2026 · Transactions 2 days behind\")."
           },
           "gameDate": {
             "$ref": "#/components/schemas/GameDateText"
@@ -1305,6 +1309,7 @@
           "level",
           "headline",
           "subtitle",
+          "subtitleHint",
           "gameDate",
           "sources",
           "facts"

@@ -20,6 +20,8 @@
 #   PENNANT_TEST_SCRATCH   the scratch folder (default: a new folder under $TMPDIR)
 #   PENNANT_TEST_UNSIGNED  1 builds without signing (CODE_SIGNING_ALLOWED=NO)
 #   PENNANT_TEST_NO_UI     1 skips step 4 and 5 (the package tests still run)
+#   PENNANT_TEST_NO_PACKAGES  1 skips step 3 (to iterate on the UI tests)
+#   PENNANT_TEST_ONLY      one UI test, as xcodebuild's -only-testing names it (PennantUITests/PennantUITests/testX)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -53,7 +55,9 @@ run synthetic-league "synthetic-league" npm run synthetic:league -- "$SCRATCH/le
 step "Staging the server (npm run mac:stage)"
 run stage "\[stage\] staged" npm run mac:stage || failed=1
 
-for package in PennantAPI PennantKit PennantDesign PennantFeatures; do
+packages=(PennantAPI PennantKit PennantDesign PennantFeatures)
+if [ "${PENNANT_TEST_NO_PACKAGES:-0}" = "1" ]; then packages=(); fi
+for package in ${packages[@]+"${packages[@]}"}; do
   step "swift test: $package"
   (cd "$ROOT/macos/Packages/$package" && \
     run "swift-test-$package" "Test run with|Executed" \
@@ -85,6 +89,7 @@ if [ "${PENNANT_TEST_NO_UI:-0}" != "1" ]; then
   prepare_ui_test testDepartmentsInspectorAndSettings configured
   signing=()
   if [ "${PENNANT_TEST_UNSIGNED:-0}" = "1" ]; then signing=(CODE_SIGNING_ALLOWED=NO); fi
+  if [ -n "${PENNANT_TEST_ONLY:-}" ]; then signing+=("-only-testing:$PENNANT_TEST_ONLY"); fi
   # TEST_RUNNER_ variables reach the test runner without the prefix: each UI test finds its prepared folder under the
   # scratch root and launches the app on it
   run xcodebuild-test "Executed|\*\* TEST" \
@@ -108,8 +113,28 @@ if [ "${PENNANT_TEST_NO_UI:-0}" != "1" ]; then
     mkdir -p "$OUT/screenshots"
     if xcrun xcresulttool export attachments --path "$OUT/Pennant.xcresult" --output-path "$OUT/screenshots" \
       >"$LOGS/attachments.log" 2>&1; then
-      count="$(find "$OUT/screenshots" -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.heic' \) | wc -l | tr -d ' ')"
-      echo "$count screenshot(s) in build/macos-test/screenshots/"
+      # Keep only the tests' own named window screenshots (and the audit's findings), under their names; anything the
+      # system attached (a screen recording, a full-screen capture, an event log) is removed, since it can show more
+      # than the app
+      node -e '
+        const fs = require("fs"), path = require("path");
+        const dir = process.argv[1];
+        const manifest = JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8"));
+        const keep = /^(main-window|setup-|department-|inspector-open|settings-|accessibility-audit)/;
+        const kept = new Set();
+        for (const test of manifest) for (const a of test.attachments ?? []) {
+          const name = a.suggestedHumanReadableName ?? "";
+          const from = path.join(dir, a.exportedFileName);
+          if (!keep.test(name) || !fs.existsSync(from)) continue;
+          const to = path.join(dir, name.replace(/_\d+_[0-9A-F-]+(\.\w+)$/i, "$1"));
+          fs.renameSync(from, to);
+          kept.add(path.basename(to));
+        }
+        for (const f of fs.readdirSync(dir)) if (!kept.has(f)) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
+      ' "$OUT/screenshots"
+      count="$(find "$OUT/screenshots" -type f -name '*.png' | wc -l | tr -d ' ')"
+      echo "$count window screenshot(s) in build/macos-test/screenshots/"
+      if [ -f "$OUT/screenshots/accessibility-audit.txt" ]; then echo "Accessibility audit findings: build/macos-test/screenshots/accessibility-audit.txt"; fi
     else
       echo "Could not extract the attachments (see $LOGS/attachments.log)"
     fi

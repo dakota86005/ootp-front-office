@@ -32,8 +32,10 @@ export interface DataStatusView {
   level: RosterEvidenceLevel;
   /** The headline, with the reasons and what would change it in its basis. */
   headline: Claim;
-  /** The window's subtitle: the game date and the headline, joined ("May 15, 2026 · Up to date"). */
+  /** The window's subtitle, short enough for the title bar: the game date and a word or two ("May 15, 2026 · Log behind"). */
   subtitle: string;
+  /** The subtitle in full, for its help tag: the game date and the headline ("May 15, 2026 · Transactions 2 days behind"). */
+  subtitleHint: string;
   gameDate: GameDateText;
   /** League data, transactions, the OOTP save and roster evidence. */
   sources: DataStatusRow[];
@@ -145,6 +147,14 @@ const ACTIONS: Record<RosterEvidenceLevel, string | null> = {
   unavailable: 'Export your OOTP database and import it to begin.',
 };
 
+/** The headline in a word or two, for the title bar's subtitle (the headline itself is its help tag). */
+const SHORT: Record<RosterEvidenceLevel, (s: DataStatus) => string> = {
+  current: () => 'Up to date',
+  stale: () => 'Behind the save',
+  partial: (s) => (s.freshness.log.state === 'behind' ? 'Log behind' : s.freshness.log.state === 'unavailable' ? 'No log' : 'Not checked'),
+  unavailable: () => 'Not imported',
+};
+
 const HEADLINE_TONE: Record<RosterEvidenceLevel, Tone> = { current: 'good', partial: 'caution', stale: 'bad', unavailable: 'bad' };
 
 /** One fact; its sort key is `order` when given (an ISO time or date sorts as written), else its shown value. */
@@ -197,7 +207,8 @@ export function dataStatusView(s: DataStatus): DataStatusView {
   return {
     level,
     headline,
-    subtitle: [gameDate, headlineText].filter((p): p is string => !!p).join(' · '),
+    subtitle: [gameDate, SHORT[level](s)].filter((p): p is string => !!p).join(' · '),
+    subtitleHint: [gameDate, headlineText].filter((p): p is string => !!p).join(' · '),
     gameDate: { served: s.csv.currentDate, display: gameDate ?? noImport },
     sources: lines.map((l) =>
       row(l.id, { source: cell(l.source), state: cell(l.state, { tone: l.tone, ...(l.hint ? { hint: l.hint } : {}) }) }, { source: l.source, state: l.order }),

@@ -46,7 +46,8 @@
     "links": [],
     "hint": "How current Pennant's copy of the league is against your OOTP save"
   },
-  "subtitle": "May 6, 2040 · Transaction history unavailable",
+  "subtitle": "May 6, 2040 · No log",
+  "subtitleHint": "May 6, 2040 · Transaction history unavailable",
   "gameDate": {
     "served": "2040-05-06",
     "display": "May 6, 2040"

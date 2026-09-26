@@ -38,6 +38,7 @@ describe('the level and each source, in a sentence', () => {
     expect(view.level).toBe('current');
     expect(view.headline).toMatchObject({ text: 'Up to date', tone: 'good' });
     expect(view.subtitle).toBe('May 9, 2040 · Up to date');
+    expect(view.subtitleHint).toBe('May 9, 2040 · Up to date');
     expect(view.sources.map((r) => [r.id, r.cells.state.display])).toEqual([
       ['league', 'Current'], ['transactions', 'Through May 8, 2040'], ['save', 'Through May 8, 2040'], ['evidence', 'Up to date'],
     ]);
@@ -56,6 +57,9 @@ describe('the level and each source, in a sentence', () => {
     const missing = status({ saveSimulatedThrough: '2040-05-08', csvCurrentDate: '2040-05-09', log: { available: false, reason: 'database_missing' } }, { log: log({ readable: false, unavailableReason: 'database_missing' }) });
     const view = dataStatusView(missing);
     expect(view.headline.text).toBe('Transaction history unavailable');
+    // The title bar's subtitle is short; the headline is its help tag
+    expect(view.subtitle).toBe('May 9, 2040 · No log');
+    expect(view.subtitleHint).toBe('May 9, 2040 · Transaction history unavailable');
     expect(view.sources[1].cells.state).toMatchObject({ display: 'Unavailable', hint: 'The save has no transaction log yet' });
     expect(view.headline.basis.unknown[0]).toMatch(/no live transaction database/);
     const torn = dataStatusView(status({ saveSimulatedThrough: '2040-05-08', csvCurrentDate: '2040-05-09', log: { available: false, reason: 'unreadable' } }, {
@@ -70,7 +74,8 @@ describe('the level and each source, in a sentence', () => {
     }));
     expect(none.headline.text).toBe('No league data imported yet');
     expect(none.gameDate).toEqual({ served: null, display: 'Not imported yet' });
-    expect(none.subtitle).toBe('No league data imported yet');
+    expect(none.subtitle).toBe('Not imported');
+    expect(none.subtitleHint).toBe('No league data imported yet');
     // A present date or time sorts by its ISO form
     expect(dataStatusView(current).facts.find((f) => f.id === 'imported')!.sort.value).toBe('2040-07-01T11:05:00.000Z');
     expect(dataStatusView(current).facts.find((f) => f.id === 'gameDate')!.sort.value).toBe('2040-05-09');
