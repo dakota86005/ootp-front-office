@@ -27,6 +27,8 @@ public final class AppModel {
     public private(set) var dataStatus: Components.Schemas.DataStatus?
     /// The last import's finish time as the server reported it; changes only when a new import lands.
     public private(set) var importStamp = ""
+    /// Counts successful backup restores; part of `storeKey`, so stores reload after one.
+    public private(set) var restoreCount = 0
     /// Whether the event stream is connected.
     public private(set) var eventStreamConnected = false
     /// Events of a known type that did not decode, reported for the log (each also re-read `/api/status`).
@@ -131,21 +133,20 @@ public final class AppModel {
         apply(await controller.state)
     }
 
-    /// Settings ▸ Restore backup: stop the server, copy the first-run backup back, start it again. Returns the
-    /// folder where the replaced files were put aside.
+    /// Settings ▸ Restore backup: stop the server, put the first-run backup back, start it again. Returns the folder
+    /// where the replaced files were put aside. The restore is all or nothing (`BackupManager.restore`): when it
+    /// throws, the folder is as it was, so the server is started on it again either way. A successful restore moves
+    /// `restoreCount`, so stores reload even though no import happened.
     @discardableResult
     public func restoreBackup() async throws -> URL {
         eventTask?.cancel()
         eventTask = nil
         await controller.stop()
-        do {
-            let aside = try backups.restore()
-            await controller.start()
-            return aside
-        } catch {
-            await controller.start()
-            throw error
-        }
+        let backups = backups
+        let result = await Task.detached(priority: .userInitiated) { Result { try backups.restore() } }.value
+        if case .success = result { restoreCount += 1 }
+        if !shuttingDown { await controller.start() }
+        return try result.get()
     }
 
     // MARK: Following the server

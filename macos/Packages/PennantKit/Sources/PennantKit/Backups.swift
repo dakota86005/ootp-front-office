@@ -48,6 +48,8 @@ public struct BackupManager: Sendable {
     public enum BackupError: Error, Sendable, Equatable {
         case noBackup
         case folderInUse
+        /// A file the record names is missing from the backup, or cannot be read; nothing was changed.
+        case backupIncomplete(missing: String)
     }
 
     /// The record of the first-run backup, if it was taken.
@@ -90,27 +92,62 @@ public struct BackupManager: Sendable {
         return .backedUp(record)
     }
 
-    /// Puts the backed-up files back. The server must be stopped first (the app stops it, restores, and starts it
-    /// again). What is in the folder now is first moved to `backups/before-restore-<time>/`, so a restore can
-    /// itself be undone by hand; a database's stale `-wal` and `-shm` are moved with it, so they cannot be
-    /// replayed over the restored file.
+    /// Puts the backed-up files back, all or nothing. The server must be stopped first (the app stops it, restores,
+    /// and starts it again).
+    /// 1. Every file the record names must be in the backup and readable; otherwise nothing is touched.
+    /// 2. They are copied into a staging folder inside the data folder (same volume, so the swap is renames).
+    /// 3. The swap: what is in the folder now (a restored database's stale `-wal` and `-shm` included, so they cannot
+    ///    be replayed over it) moves to `backups/before-restore-<time>/`, then the staged copies move in.
+    /// If any step fails, what moved is moved back and the error is thrown: the folder is as it was, and always holds a
+    /// usable `history.db`. Returns the folder holding the replaced files, so a restore can be undone by hand.
     @discardableResult
     public func restore(now: Date = .now) throws -> URL {
+        try restore(now: now, beforeMovingIn: { _ in })
+    }
+
+    /// `beforeMovingIn` runs before each staged file moves into place (a test fails one to check the roll-back).
+    func restore(now: Date, beforeMovingIn: (String) throws -> Void) throws -> URL {
         guard let record = record() else { throw BackupError.noBackup }
         if folderIsInUse() { throw BackupError.folderInUse }
         let manager = FileManager.default
         let source = backupsFolder.appending(path: record.folder, directoryHint: .isDirectory)
+        // 1. The backup is whole
+        for name in record.files where !manager.isReadableFile(atPath: source.appending(path: name).path) {
+            throw BackupError.backupIncomplete(missing: name)
+        }
+        // 2. Staged next to the live files
+        let staging = dataFolder.appending(path: ".restore-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? manager.removeItem(at: staging) }
+        try manager.createDirectory(at: staging, withIntermediateDirectories: true)
+        for name in record.files {
+            try manager.copyItem(at: source.appending(path: name), to: staging.appending(path: name))
+        }
+        // 3. The swap, undone on any failure
         let aside = uniqueFolder(named: "before-restore-\(Self.timeStamp(now))")
         try manager.createDirectory(at: aside, withIntermediateDirectories: true)
-        for name in Self.filesWithCompanions() {
-            let current = dataFolder.appending(path: name)
-            let restoresThis = record.files.contains(name)
-                || Self.sqliteCompanions.contains { name.hasSuffix($0) && record.files.contains(String(name.dropLast($0.count))) }
-            guard restoresThis, manager.fileExists(atPath: current.path) else { continue }
-            try manager.moveItem(at: current, to: aside.appending(path: name))
-        }
-        for name in record.files {
-            try manager.copyItem(at: source.appending(path: name), to: dataFolder.appending(path: name))
+        var movedAside: [String] = []
+        var movedIn: [String] = []
+        do {
+            for name in Self.filesWithCompanions() {
+                let current = dataFolder.appending(path: name)
+                let restoresThis = record.files.contains(name)
+                    || Self.sqliteCompanions.contains { name.hasSuffix($0) && record.files.contains(String(name.dropLast($0.count))) }
+                guard restoresThis, manager.fileExists(atPath: current.path) else { continue }
+                try manager.moveItem(at: current, to: aside.appending(path: name))
+                movedAside.append(name)
+            }
+            for name in record.files {
+                try beforeMovingIn(name)
+                try manager.moveItem(at: staging.appending(path: name), to: dataFolder.appending(path: name))
+                movedIn.append(name)
+            }
+        } catch {
+            for name in movedIn { try? manager.removeItem(at: dataFolder.appending(path: name)) }
+            for name in movedAside {
+                try? manager.moveItem(at: aside.appending(path: name), to: dataFolder.appending(path: name))
+            }
+            try? manager.removeItem(at: aside)
+            throw error
         }
         return aside
     }

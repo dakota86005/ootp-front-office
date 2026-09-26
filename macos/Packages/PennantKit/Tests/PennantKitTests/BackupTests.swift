@@ -298,3 +298,95 @@ struct BackupGateTests {
         #expect(launcher.launched.isEmpty)
     }
 }
+
+/// A restore is all or nothing (review S2).
+@Suite("Restoring the backup")
+struct RestoreTests {
+    private func backedUpFolder() throws -> (BackupManager, BackupManager.Record) {
+        let data = try scratchFolder("restore")
+        try Data("before".utf8).write(to: data.appending(path: "history.db"))
+        try Data("old settings".utf8).write(to: data.appending(path: "settings.json"))
+        let backups = BackupManager(dataFolder: data)
+        guard case .backedUp(let record) = try backups.backUpIfFirstRun() else { throw Timeout() }
+        try Data("after".utf8).write(to: data.appending(path: "history.db"))
+        try Data("after wal".utf8).write(to: data.appending(path: "history.db-wal"))
+        try Data("new settings".utf8).write(to: data.appending(path: "settings.json"))
+        return (backups, record)
+    }
+
+    private func read(_ backups: BackupManager, _ name: String) -> String? {
+        try? String(contentsOf: backups.dataFolder.appending(path: name), encoding: .utf8)
+    }
+
+    private func untouched(_ backups: BackupManager) {
+        #expect(read(backups, "history.db") == "after")
+        #expect(read(backups, "history.db-wal") == "after wal")
+        #expect(read(backups, "settings.json") == "new settings")
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: backups.dataFolder.path)) ?? []
+        #expect(names.contains { $0.hasPrefix(".restore-") } == false)
+        let kept = (try? FileManager.default.contentsOfDirectory(atPath: backups.backupsFolder.path)) ?? []
+        #expect(kept.contains { $0.hasPrefix("before-restore-") } == false)
+    }
+
+    @Test("a file missing from the backup: nothing is touched")
+    func missingSource() throws {
+        let (backups, record) = try backedUpFolder()
+        try FileManager.default.removeItem(at: backups.backupsFolder.appending(path: "\(record.folder)/history.db"))
+        #expect(throws: BackupManager.BackupError.backupIncomplete(missing: "history.db")) { try backups.restore() }
+        untouched(backups)
+    }
+
+    @Test("an unreadable file in the backup: nothing is touched")
+    func unreadableSource() throws {
+        let (backups, record) = try backedUpFolder()
+        let copy = backups.backupsFolder.appending(path: "\(record.folder)/settings.json")
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: copy.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: copy.path) }
+        #expect(throws: BackupManager.BackupError.backupIncomplete(missing: "settings.json")) { try backups.restore() }
+        untouched(backups)
+    }
+
+    @Test("a failure in the middle of the swap puts every original back")
+    func failureMidSwap() throws {
+        struct Injected: Error {}
+        let (backups, _) = try backedUpFolder()
+        #expect(throws: Injected.self) {
+            try backups.restore(now: .now) { name in if name == "settings.json" { throw Injected() } }
+        }
+        untouched(backups)
+    }
+
+    @Test("a whole restore swaps every file and sets the replaced ones aside")
+    func whole() throws {
+        let (backups, _) = try backedUpFolder()
+        let aside = try backups.restore()
+        #expect(read(backups, "history.db") == "before")
+        #expect(read(backups, "settings.json") == "old settings")
+        #expect(FileManager.default.fileExists(atPath: backups.dataFolder.appending(path: "history.db-wal").path) == false)
+        #expect((try? String(contentsOf: aside.appending(path: "history.db-wal"), encoding: .utf8)) == "after wal")
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: backups.dataFolder.path)) ?? []
+        #expect(names.contains { $0.hasPrefix(".restore-") } == false)
+    }
+
+    @Test("the app model restarts the server after a failed restore, on the untouched folder")
+    @MainActor
+    func appModelAfterFailure() async throws {
+        let configuration = try fakeConfiguration()
+        try FileManager.default.createDirectory(at: configuration.dataFolder, withIntermediateDirectories: true)
+        try Data("before".utf8).write(to: configuration.dataFolder.appending(path: "history.db"))
+        let status = try fixtureStatus()
+        let launcher = FakeLauncher { process, _ in process.ready() }
+        let controller = ServerController(configuration: configuration, launcher: launcher, keySource: NoKeys(), probe: { _, _ in status }, timing: fastTiming)
+        let model = AppModel(configuration: configuration, controller: controller)
+        await model.start()
+        #expect(await eventually { model.serverState.connection != nil })
+        let record = try #require(model.backups.record())
+        try Data("after".utf8).write(to: configuration.dataFolder.appending(path: "history.db"))
+        try FileManager.default.removeItem(at: model.backups.backupsFolder.appending(path: "\(record.folder)/history.db"))
+        await #expect(throws: BackupManager.BackupError.self) { try await model.restoreBackup() }
+        #expect(model.restoreCount == 0)
+        #expect(await eventually { model.serverState.connection != nil })
+        #expect((try? String(contentsOf: configuration.dataFolder.appending(path: "history.db"), encoding: .utf8)) == "after")
+        await model.shutdown()
+    }
+}
