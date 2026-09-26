@@ -52,7 +52,7 @@ struct ShellSplitView: View {
             DetailView(window: window)
                 .safeAreaInset(edge: .top, spacing: 0) { ImportRequestBanner() }
                 .navigationTitle(Text(window.descriptor?.title ?? "Pennant"))
-                .navigationSubtitle(ServedText.subtitle(dataStatus: model.dataStatus, status: model.status) ?? "")
+                .navigationSubtitle(ServedText.subtitle(dataStatus: model.dataStatus) ?? "")
                 .toolbar { WindowToolbar(window: window) }
                 .inspector(isPresented: $window.inspectorPresented) {
                     InspectorView()

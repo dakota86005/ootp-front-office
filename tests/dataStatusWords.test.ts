@@ -71,6 +71,9 @@ describe('the level and each source, in a sentence', () => {
     expect(none.headline.text).toBe('No league data imported yet');
     expect(none.gameDate).toEqual({ served: null, display: 'Not imported yet' });
     expect(none.subtitle).toBe('No league data imported yet');
+    // A present date or time sorts by its ISO form
+    expect(dataStatusView(current).facts.find((f) => f.id === 'imported')!.sort.value).toBe('2040-07-01T11:05:00.000Z');
+    expect(dataStatusView(current).facts.find((f) => f.id === 'gameDate')!.sort.value).toBe('2040-05-09');
     expect(none.facts.map((f) => [f.id, f.cells.value.display, f.sort.value])).toEqual([
       ['gameDate', 'Not imported yet', null],
       ['importedThrough', 'Not imported yet', null],

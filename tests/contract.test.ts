@@ -229,6 +229,8 @@ function stable(value: unknown): unknown {
     if (typeof node !== 'string') return node;
     if (iso.test(node)) return '2040-07-01T12:00:00.000Z';
     if (key === 'version') return '0.0.0';
+    // A served time in words is written in the host's zone; the fixture keeps a fixed one
+    if (key === 'csvLastModifiedText') return 'Jul 1, 2040, 12:00 PM';
     let text = node;
     for (const root of roots) {
       text = text.split(root).join('/tmp');
@@ -437,7 +439,7 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
         if (operationId === 'getDataStatusWords') {
           expect(bannedInPayload(body, operationId)).toEqual([]);
           // The export's time is the pretend folder's, written in the host's zone: the fixture keeps a fixed one
-          for (const row of body.facts) if (row.id === 'exported' && row.sort.value) row.cells.value.display = row.sort.value = 'Jul 1, 2040, 12:00 PM';
+          for (const row of body.facts) if (row.id === 'exported' && row.sort.value) row.cells.value.display = 'Jul 1, 2040, 12:00 PM';
         } else {
           expect(body.configured, operationId).toBe(true);
         }

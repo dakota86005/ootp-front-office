@@ -13,6 +13,7 @@ import type { Cell, Claim, Row, Tone } from '../contract/presentation.js';
 import { gameDateWords, type DataStatus } from '../dataStatus.js';
 import { parseGameDate, type GameDate, type RosterEvidenceLevel } from '../dataFreshness.js';
 import type { SaveDiscoveryMethod } from '../ootpSave.js';
+import { timestampWords } from '../timeWords.js';
 import { basis, cell, claim, row } from './claim.js';
 
 /** A game date as served (unpadded, as OOTP writes it, or null) and as the app shows it. */
@@ -50,13 +51,6 @@ export function gameDateDisplay(raw: string | null | undefined): string | null {
   return parsed ? gameDateWords(parsed) : null;
 }
 
-/** A served ISO timestamp (an export's or an import's time) as a reader's date and time, in the server's own time zone. */
-export function timestampDisplay(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return null;
-  return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(at);
-}
 
 /** How the save was found, in words. */
 export const DISCOVERY_WORDS: Record<SaveDiscoveryMethod, string> = {
@@ -153,11 +147,12 @@ const ACTIONS: Record<RosterEvidenceLevel, string | null> = {
 
 const HEADLINE_TONE: Record<RosterEvidenceLevel, Tone> = { current: 'good', partial: 'caution', stale: 'bad', unavailable: 'bad' };
 
-function fact(id: string, label: string, value: string | null, missing: string, hint?: string): DataStatusFact {
+/** One fact; its sort key is `order` when given (an ISO time or date sorts as written), else its shown value. */
+function fact(id: string, label: string, value: string | null, missing: string, hint?: string, order?: string | null): DataStatusFact {
   return row(
     id,
     { label: cell(label), value: value ? cell(value, hint ? { hint } : {}) : cell(missing, { tone: 'unknown' }) },
-    { label, value: value ?? null },
+    { label, value: value ? (order ?? value) : null },
   );
 }
 
@@ -191,11 +186,11 @@ export function dataStatusView(s: DataStatus): DataStatusView {
 
   const noImport = 'Not imported yet';
   const facts: DataStatusFact[] = [
-    fact('gameDate', 'Game date', gameDate, noImport),
-    fact('importedThrough', 'Imported data through', gameDateDisplay(s.csv.simulatedThrough), noImport),
-    fact('saveThrough', 'Save through', gameDateDisplay(s.save.simulatedThrough), s.save.found ? 'Date unreadable' : 'Save not found'),
-    fact('exported', 'Exported', timestampDisplay(s.csv.exportedAt), s.configured ? 'Export not found' : 'No save chosen'),
-    fact('imported', 'Imported', timestampDisplay(s.csv.importedAt), noImport),
+    fact('gameDate', 'Game date', gameDate, noImport, undefined, parseGameDate(s.csv.currentDate)),
+    fact('importedThrough', 'Imported data through', gameDateDisplay(s.csv.simulatedThrough), noImport, undefined, parseGameDate(s.csv.simulatedThrough)),
+    fact('saveThrough', 'Save through', gameDateDisplay(s.save.simulatedThrough), s.save.found ? 'Date unreadable' : 'Save not found', undefined, parseGameDate(s.save.simulatedThrough)),
+    fact('exported', 'Exported', timestampWords(s.csv.exportedAt), s.configured ? 'Export not found' : 'No save chosen', undefined, s.csv.exportedAt),
+    fact('imported', 'Imported', timestampWords(s.csv.importedAt), noImport, undefined, s.csv.importedAt),
     fact('saveFolder', 'Save folder', s.save.lgPath, DISCOVERY_WORDS.not_found, s.save.lgPath ? DISCOVERY_WORDS[s.save.discovery] : undefined),
   ];
 

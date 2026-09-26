@@ -131,7 +131,7 @@
       },
       "sort": {
         "label": "Game date",
-        "value": "May 6, 2040"
+        "value": "2040-05-06"
       }
     },
     {
@@ -146,7 +146,7 @@
       },
       "sort": {
         "label": "Imported data through",
-        "value": "May 5, 2040"
+        "value": "2040-05-05"
       }
     },
     {

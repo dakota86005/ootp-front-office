@@ -168,7 +168,8 @@ public final class SetupModel {
                 lgPath: path,
                 csvDir: csvDir,
                 csvCount: result.csvCount ?? 0,
-                csvLastModified: nil
+                csvLastModified: nil,
+                csvLastModifiedText: nil
             )
             busy = false
             await choose(save, status: status)

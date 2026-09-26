@@ -194,7 +194,7 @@ private struct SaveList: View {
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(verbatim: save.name).font(.headline)
-                        if let written = ServedText.timestamp(save.csvLastModified) {
+                        if let written = save.csvLastModifiedText {
                             Text(verbatim: written).font(.caption).foregroundStyle(.secondary)
                         }
                     }

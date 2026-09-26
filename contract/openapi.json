@@ -2613,6 +2613,13 @@
               "string",
               "null"
             ]
+          },
+          "csvLastModifiedText": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`csvLastModified` in words (`timeWords.ts`); null with it."
           }
         },
         "required": [
@@ -2620,7 +2627,8 @@
           "lgPath",
           "csvDir",
           "csvCount",
-          "csvLastModified"
+          "csvLastModified",
+          "csvLastModifiedText"
         ]
       },
       "SaveList": {
