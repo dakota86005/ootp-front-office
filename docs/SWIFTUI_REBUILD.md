@@ -469,7 +469,10 @@ with scripted processes, and `ServerIntegrationTests` with the real staged serve
 - The child gets only `HOME`, `USER`, `LOGNAME`, `TMPDIR`, `LANG`, `LC_ALL`, a fixed `PATH` and the five variables. The
   app's own environment is not passed on, so a provider key exported in a shell cannot outrank the Keychain's. The
   handshake carries a fresh 64-character token and the keys read from the Keychain (`com.dakotawise.pennant.apikeys`,
-  one generic password per provider id, read without ever showing a prompt; saving a key arrives with N13).
+  one generic password per provider id, saving a key arrives with N13). The read is asynchronous, on a detached task,
+  and happens before anything is spawned, so a slow Keychain delays the start but never the handshake. It is meant not
+  to prompt (`interactionNotAllowed`), but that governs the data-protection keychain, while the query searches the
+  login keychain, where an item whose access list does not trust the build could still show the system's dialog.
 - Ready means `PENNANT_READY` within 30 s and then `GET /api/status` (three tries, half a second apart). No ready line
   in time, or a status that never answers, is a failure (the process is stopped), not a crash to retry: a hang does
   not cure itself.
@@ -679,7 +682,7 @@ sizes, not dates.
 | **N10** | Farm & Development | Server: farm copy, Prospects words and Development movers moved. App: Overview, Organization, Affiliates, Assignments, Decision, Prospects, Development tracking | 5 |
 | **N11** | Player windows and comparison | Dossier (Overview, Ratings, Value with Swift Charts ranges, Contract & rights, History, notes), Compare window, drag and drop | 3 |
 | **N12** | Finance, Trades, Scouting, Medical, League Office, Philosophy | Payroll (Charts plus budget rule), Contracts, Free agents, Horizon; Trade builder (drop targets, range charts, existing AI evaluation); Draft and Search (tokens); Injuries; Standings (odds and posture with basis), Leaders, Org comparison, Franchise; Philosophy editor with the server-side identity endpoint; Coaching staff | 6 |
-| **N13** | AI surfaces, native | Staff room (SSE streaming, markdown via `AttributedString`, server-provided player links), Storylines, GM Briefing; keys in the Keychain. Behaviour unchanged | 2 |
+| **N13** | AI surfaces, native | Staff room (SSE streaming, markdown via `AttributedString`, server-provided player links), Storylines, GM Briefing; keys in the Keychain (decide then between the data-protection keychain, which needs an application-identifier entitlement and so a provisioning profile, and the login keychain, whose per-item access lists can prompt; N3 only reads). Behaviour unchanged | 2 |
 | **N14** | macOS integration and release | App Intents and Spotlight, widgets (App Group), menu bar extra (optional), Sparkle with appcast on GitHub Releases (`pennant-v*`), notarized DMG pipeline | 3 |
 | **N15** | Acceptance and cutover | Accessibility audit, Instruments pass, parity checklist against the React app (every field, every hover), acceptance by the owner and his brother; then the **cutover PR** (delete `src/`, `electron/`, the web tests and dependencies; docs), and merge to `main` with the owner's approval | 3 |
 

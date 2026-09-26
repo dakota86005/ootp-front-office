@@ -191,23 +191,23 @@ public actor ServerController {
     // MARK: Starting and stopping
 
     /// Starts the server unless it is already starting or running.
-    public func start() {
+    public func start() async {
         switch state {
         case .idle, .stopped, .failed, .locked:
             policy.reset()
-            launch()
+            await launch()
         case .starting, .ready, .restarting, .stopping:
             return
         }
     }
 
     /// Try Again after a failure or a locked folder: forgets earlier crashes and starts afresh.
-    public func tryAgain() {
+    public func tryAgain() async {
         restartTask?.cancel()
         switch state {
         case .failed, .locked, .stopped, .idle, .restarting:
             policy.reset()
-            launch()
+            await launch()
         case .starting, .ready, .stopping:
             return
         }
@@ -221,6 +221,8 @@ public actor ServerController {
         confirmTask?.cancel()
         guard let child = process else {
             if case .idle = state { return }
+            // A launch still preparing (reading the keys) finds its number stale and does not spawn
+            generation += 1
             set(.stopped)
             return
         }
@@ -246,10 +248,11 @@ public actor ServerController {
     }
 
     /// Hands new keys to the running server without a restart (Settings, N13).
-    public func updateKeys() {
+    public func updateKeys() async {
+        let keys = await keySource.keys()
         guard let child = process else { return }
         do {
-            try child.send(SidecarProtocol.keysLine(keys: keySource.keys()))
+            try child.send(SidecarProtocol.keysLine(keys: keys))
         } catch {
             log.write("could not hand over the keys: \(error)", source: "app")
         }
@@ -268,7 +271,7 @@ public actor ServerController {
         }
     }
 
-    private func launch() {
+    private func launch() async {
         restartTask?.cancel()
         generation += 1
         let launchNumber = generation
@@ -285,6 +288,10 @@ public actor ServerController {
             set(.failed(ServerFailure(kind: .notInstalled)))
             return
         }
+        // The keys first, off the main thread and before anything is spawned: a slow Keychain delays the start,
+        // never the handshake's 30 s
+        let keys = await keySource.keys()
+        guard launchNumber == generation, !stopRequested else { return }
         try? manager.createDirectory(at: configuration.dataFolder, withIntermediateDirectories: true)
 
         let token = SidecarProtocol.makeToken()
@@ -300,7 +307,7 @@ public actor ServerController {
         phase = .awaitingReady(token: token)
         log.write("started process \(child.pid) on \(configuration.dataFolder.plainPath)", source: "app")
         do {
-            try child.send(SidecarProtocol.handshakeLine(token: token, keys: keySource.keys()))
+            try child.send(SidecarProtocol.handshakeLine(token: token, keys: keys))
         } catch {
             // It has already gone; its exit is handled below
             log.write("could not write the handshake: \(error)", source: "app")
@@ -430,13 +437,13 @@ public actor ServerController {
             set(.restarting(attempt: attempt, after: delay))
             restartTask = Task {
                 try? await Task.sleep(for: delay)
-                if !Task.isCancelled { self.restartAfterWait(launch: launchNumber) }
+                if !Task.isCancelled { await self.restartAfterWait(launch: launchNumber) }
             }
         }
     }
 
-    private func restartAfterWait(launch launchNumber: Int) {
+    private func restartAfterWait(launch launchNumber: Int) async {
         guard launchNumber == generation, case .restarting = state else { return }
-        launch()
+        await launch()
     }
 }

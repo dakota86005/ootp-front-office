@@ -358,3 +358,63 @@ struct UnusableServerTests {
         #expect(seen.states.contains { $0.connection != nil } == false)
     }
 }
+
+/// Keys that take a while to read (a Keychain waiting on the system).
+struct SlowKeys: KeySource {
+    let delay: Duration
+    let values: [String: String]
+    func keys() async -> [String: String] {
+        try? await Task.sleep(for: delay)
+        return values
+    }
+}
+
+/// The keys are read asynchronously, before anything is spawned (review S7).
+@Suite("Reading the keys")
+struct KeyReadingTests {
+    @Test("a slow key read keeps the controller answering, spawns nothing until it is done, then hands the keys over")
+    func slowKeys() async throws {
+        let launcher = FakeLauncher { process, _ in process.ready() }
+        let status = try fixtureStatus()
+        let controller = ServerController(
+            configuration: try fakeConfiguration(), launcher: launcher,
+            keySource: SlowKeys(delay: .milliseconds(300), values: ["anthropic": "sk-ant-slow"]),
+            probe: { _, _ in status }, timing: fastTiming
+        )
+        let starting = Task { await controller.start() }
+        try await Task.sleep(for: .milliseconds(50))
+        let asked = ContinuousClock.now
+        #expect(await controller.state == .starting)
+        #expect(ContinuousClock.now - asked < .milliseconds(100))
+        #expect(launcher.launched.isEmpty)
+        await starting.value
+        try await waitForState(controller) { $0.connection != nil }
+        let handshake = try #require(launcher.launched.first?.sent.first)
+        #expect(String(decoding: handshake, as: UTF8.self).contains("sk-ant-slow"))
+        await controller.stop()
+    }
+
+    @Test("a stop while the keys are being read cancels the launch: nothing is spawned")
+    func stopWhileReadingKeys() async throws {
+        let launcher = FakeLauncher { process, _ in process.ready() }
+        let controller = ServerController(
+            configuration: try fakeConfiguration(), launcher: launcher,
+            keySource: SlowKeys(delay: .milliseconds(200), values: [:]),
+            probe: { _, _ in throw Timeout() }, timing: fastTiming
+        )
+        let starting = Task { await controller.start() }
+        try await Task.sleep(for: .milliseconds(50))
+        await controller.stop()
+        await starting.value
+        #expect(await controller.state == .stopped)
+        #expect(launcher.launched.isEmpty)
+    }
+
+    @Test("the Keychain store reads on a detached task, not on the caller's actor")
+    @MainActor
+    func keychainOffMain() async {
+        // An unused service: nothing is found, and nothing prompts
+        let keys = await KeychainKeyStore(service: "com.dakotawise.pennant.tests.\(UUID().uuidString)").keys()
+        #expect(keys.isEmpty)
+    }
+}
