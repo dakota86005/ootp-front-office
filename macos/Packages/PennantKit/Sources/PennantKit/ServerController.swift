@@ -53,6 +53,9 @@ public struct ServerFailure: Sendable, Equatable {
         case couldNotLaunch
         /// The server did not accept the handshake (exit code 2).
         case handshake
+        /// The server said why it could not start (`PENNANT_FAILED`, exit code 1). Not retried: its reason does not
+        /// go away by waiting.
+        case startFailed
         /// No `PENNANT_READY` within the ready timeout.
         case notReady
         /// Ready, but `/api/status` did not answer.
@@ -410,6 +413,11 @@ public actor ServerController {
         }
         if ending == .noHandshake {
             set(.failed(ServerFailure(kind: .handshake, serverMessage: lastFailure?.message)))
+            return
+        }
+        if ending == .couldNotStart, let failure = lastFailure {
+            log.write("the server could not start (\(failure.reason)); not retrying", source: "app")
+            set(.failed(ServerFailure(kind: .startFailed, serverMessage: failure.message)))
             return
         }
         let now = ContinuousClock.now

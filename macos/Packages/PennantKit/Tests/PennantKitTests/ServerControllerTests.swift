@@ -142,7 +142,8 @@ struct ServerControllerTests {
     func crashLoop() async throws {
         let launcher = FakeLauncher { process, number in
             if number <= 5 {
-                process.fail(reason: "start", message: "The export folder could not be read.", status: 1)
+                process.print("[server] something went wrong")
+                process.end(status: 1)
             } else {
                 process.ready()
             }
@@ -150,13 +151,30 @@ struct ServerControllerTests {
         let controller = try controller(launcher)
         await controller.start()
         let state = try await waitForState(controller) { if case .failed = $0 { true } else { false } }
-        #expect(state == .failed(ServerFailure(kind: .crashedRepeatedly, serverMessage: "The export folder could not be read.")))
+        #expect(state == .failed(ServerFailure(kind: .crashedRepeatedly)))
         #expect(launcher.launched.count == 5)
 
         await controller.tryAgain()
         try await waitForState(controller) { $0.connection != nil }
         #expect(launcher.launched.count == 6)
         await controller.stop()
+    }
+
+    @Test("a start failure the server explains (exit code 1 with its sentence) is shown at once, not retried")
+    func startFailureShownAtOnce() async throws {
+        let launcher = FakeLauncher { process, _ in
+            process.fail(reason: "start", message: "The export folder could not be read.", status: 1)
+        }
+        let controller = try controller(launcher)
+        let seen = StateLog()
+        let updates = await controller.stateUpdates()
+        let watcher = Task { for await state in updates { seen.append(state) } }
+        await controller.start()
+        let state = try await waitForState(controller) { if case .failed = $0 { true } else { false } }
+        watcher.cancel()
+        #expect(state == .failed(ServerFailure(kind: .startFailed, serverMessage: "The export folder could not be read.")))
+        #expect(seen.states.contains { if case .restarting = $0 { true } else { false } } == false)
+        #expect(launcher.launched.count == 1)
     }
 
     @Test("no ready line in time is a failure, and the silent process is stopped")

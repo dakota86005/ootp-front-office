@@ -38,7 +38,7 @@ extension ServerFailure.Kind {
     var title: LocalizedStringKey {
         switch self {
         case .notInstalled: "The server is missing from this build"
-        case .couldNotLaunch, .handshake: "The server could not be started"
+        case .couldNotLaunch, .handshake, .startFailed: "The server could not be started"
         case .notReady: "The server did not start in time"
         case .statusCheck: "The server did not answer"
         case .crashedRepeatedly: "The server keeps stopping"
