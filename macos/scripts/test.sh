@@ -8,7 +8,9 @@
 #   3. runs each package's Swift tests (PennantAPI, PennantKit and PennantFeatures with their real-server integration
 #      tests, PennantDesign); PennantFeatures also draws the shell's snapshots into build/macos-snapshots/;
 #   4. runs `xcodebuild test` on the Pennant scheme: the app with its server and the XCUITests, each test on a fresh
-#      scratch data folder holding the synthetic league;
+#      scratch data folder holding the synthetic league. The XCUITest runner is sandboxed and cannot create folders, so
+#      this script prepares every test's folder (the league copied in, a pretend OOTP save, the save chosen where the
+#      test wants one) and passes only the scratch root; the runner writes nothing;
 #   5. extracts the XCUITest screenshots with xcresulttool.
 #
 # Output goes to build/macos-test/ (ignored by Git): logs/, Pennant.xcresult and screenshots/. Only summaries and
@@ -63,15 +65,37 @@ if [ "${PENNANT_TEST_NO_UI:-0}" != "1" ]; then
   UI_SCRATCH="$SCRATCH/ui"
   rm -rf "$UI_SCRATCH" "$OUT/Pennant.xcresult" "$OUT/screenshots"
   mkdir -p "$UI_SCRATCH"
+  # One folder per UI test (the method's name), each with its own data folder holding the synthetic league and a
+  # pretend OOTP save; `configured` chooses the save for the server before the app starts (its config.json), `new`
+  # leaves it for the Setup window to find. The runner only reads these paths.
+  prepare_ui_test() {
+    local test="$1" kind="$2"
+    local root="$UI_SCRATCH/$test"
+    local csv="$root/saves/Synthetic League.lg/import_export/csv"
+    mkdir -p "$root/data" "$root/logs" "$csv"
+    cp "$LEAGUE" "$root/data/league.db"
+    printf 'id,note\n1,one\n2,two\n' > "$csv/zz_ui_check.csv"
+    if [ "$kind" = "configured" ]; then
+      node -e 'process.stdout.write(JSON.stringify({ csvDir: process.argv[1], saveName: "Synthetic League" }))' "$csv" \
+        > "$root/data/config.json"
+    fi
+  }
+  prepare_ui_test testStartsTheServerAndQuitsCleanly configured
+  prepare_ui_test testSetupFlowOnAScratchFolder new
+  prepare_ui_test testDepartmentsInspectorAndSettings configured
   signing=()
   if [ "${PENNANT_TEST_UNSIGNED:-0}" = "1" ]; then signing=(CODE_SIGNING_ALLOWED=NO); fi
-  # TEST_RUNNER_ variables reach the test runner without the prefix: each UI test copies the league into a data
-  # folder of its own under the scratch folder and launches the app on it
+  # TEST_RUNNER_ variables reach the test runner without the prefix: each UI test finds its prepared folder under the
+  # scratch root and launches the app on it
   run xcodebuild-test "Executed|\*\* TEST" \
-    env TEST_RUNNER_PENNANT_UI_SCRATCH="$UI_SCRATCH" TEST_RUNNER_PENNANT_UI_LEAGUE="$LEAGUE" \
+    env TEST_RUNNER_PENNANT_UI_SCRATCH="$UI_SCRATCH" \
     xcodebuild -project "$ROOT/macos/Pennant.xcodeproj" -scheme Pennant -destination 'platform=macOS' \
       -derivedDataPath "$OUT/DerivedData" -resultBundlePath "$OUT/Pennant.xcresult" \
       -skipPackagePluginValidation ${signing[@]+"${signing[@]}"} test || failed=1
+  if grep -q "Failed to activate application" "$LOGS/xcodebuild-test.log"; then
+    echo "The app started (see each test's logs/server.log under $UI_SCRATCH) but XCUITest could not bring it to the"
+    echo "front. That happens while the Mac's screen is locked or asleep: unlock it and run the tests again."
+  fi
   if grep -q "enabling automation mode" "$LOGS/xcodebuild-test.log"; then
     echo "UI automation is not enabled on this Mac, so the XCUITests could not drive the app. Enable it once as the"
     echo "Mac's owner (it asks for your password): run the Pennant scheme's tests from Xcode, or"
