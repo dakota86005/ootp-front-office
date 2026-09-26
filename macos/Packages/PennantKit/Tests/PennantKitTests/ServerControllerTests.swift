@@ -281,3 +281,62 @@ final class StateLog: @unchecked Sendable {
     var states: [ServerState] { lock.withLock { _states } }
     func append(_ state: ServerState) { lock.withLock { _states.append(state) } }
 }
+
+/// A server judged unusable is never published as ready (review S3).
+@Suite("A server judged unusable")
+struct UnusableServerTests {
+    let status: Components.Schemas.ServerStatus
+
+    init() throws {
+        status = try fixtureStatus()
+    }
+
+    @Test("a ready line that arrives after the ready timeout, while the process is being stopped, is not ready")
+    func lateReadyLine() async throws {
+        let launcher = FakeLauncher(ignoresTerminate: true) { process, _ in
+            Task.detached {
+                try? await Task.sleep(for: .milliseconds(150))
+                process.ready()
+            }
+        }
+        let status = status
+        let controller = ServerController(
+            configuration: try fakeConfiguration(), launcher: launcher, keySource: NoKeys(), probe: { _, _ in status },
+            timing: ServerTiming(readyTimeout: .milliseconds(100), stopGrace: .milliseconds(500))
+        )
+        let seen = StateLog()
+        let updates = await controller.stateUpdates()
+        let watcher = Task { for await state in updates { seen.append(state) } }
+        await controller.start()
+        let final = try await waitForState(controller, timeout: .seconds(3)) { if case .failed = $0 { true } else { false } }
+        watcher.cancel()
+        #expect(final == .failed(ServerFailure(kind: .notReady)))
+        #expect(seen.states.contains { $0.connection != nil } == false)
+    }
+
+    @Test("a status check that answers while the server is being stopped does not make it ready")
+    func probeAnswersDuringStop() async throws {
+        let launcher = FakeLauncher(ignoresTerminate: true) { process, _ in process.ready() }
+        let status = status
+        let probing = ProbeLog()
+        let controller = ServerController(
+            configuration: try fakeConfiguration(), launcher: launcher, keySource: NoKeys(),
+            probe: { port, token in
+                probing.record(port: port, token: token)
+                try? await Task.sleep(for: .milliseconds(200))
+                return status
+            },
+            timing: ServerTiming(readyTimeout: .seconds(2), stopGrace: .milliseconds(500))
+        )
+        let seen = StateLog()
+        let updates = await controller.stateUpdates()
+        let watcher = Task { for await state in updates { seen.append(state) } }
+        await controller.start()
+        #expect(await eventually { !probing.calls.isEmpty })
+        await controller.stop()
+        try await Task.sleep(for: .milliseconds(100))
+        watcher.cancel()
+        #expect(await controller.state == .stopped)
+        #expect(seen.states.contains { $0.connection != nil } == false)
+    }
+}

@@ -222,6 +222,8 @@ public actor ServerController {
             return
         }
         stopRequested = true
+        // A server being stopped is never confirmed: a probe that answers now finds no phase to publish from
+        phase = .none
         set(.stopping)
         log.write("stopping process \(child.pid)", source: "app")
         child.terminate()
@@ -344,7 +346,7 @@ public actor ServerController {
         for attempt in 1...max(timing.statusAttempts, 1) {
             do {
                 let status = try await probe(ready.port, token)
-                guard launchNumber == generation, case .confirming = phase, let child = process else { return }
+                guard launchNumber == generation, !stopRequested, case .confirming = phase, let child = process else { return }
                 phase = .running(since: .now)
                 log.write("ready on port \(ready.port)", source: "app")
                 set(.ready(ServerConnection(port: ready.port, token: token, pid: child.pid, status: status)))
@@ -357,8 +359,10 @@ public actor ServerController {
         }
         guard launchNumber == generation, let child = process else { return }
         let detail = lastError.map { String(describing: $0) }
+        guard case .confirming = phase, !stopRequested else { return }
         log.write("the status check failed: \(detail ?? "no answer")", source: "app")
         pendingFailure = ServerFailure(kind: .statusCheck, detail: detail)
+        phase = .none
         endUnresponsive(child)
     }
 
@@ -366,10 +370,13 @@ public actor ServerController {
         guard launchNumber == generation, case .awaitingReady = phase, let child = process else { return }
         log.write("no ready line within \(timing.readyTimeout)", source: "app")
         pendingFailure = ServerFailure(kind: .notReady)
+        // Judged unusable: a ready line in the grace period finds no phase to be confirmed from
+        phase = .none
         endUnresponsive(child)
     }
 
-    /// SIGTERM, then SIGKILL after the grace period, for a server that will not be used.
+    /// SIGTERM, then SIGKILL after the grace period, for a server that will not be used. Callers clear `phase` first,
+    /// so nothing the process says while it ends can make it ready.
     private func endUnresponsive(_ child: any SidecarProcess) {
         child.terminate()
         let grace = timing.stopGrace
