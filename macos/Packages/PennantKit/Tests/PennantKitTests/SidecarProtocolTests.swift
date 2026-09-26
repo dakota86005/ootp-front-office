@@ -211,3 +211,19 @@ struct DevelopmentFolderTests {
 }
 
 private final class BundleMarker {}
+
+@Suite("Waiting for a process to end")
+struct ExitStateTests {
+    @Test("a waiter whose task is cancelled returns nil at once, as stop() relies on")
+    func cancellation() async {
+        let state = ExitState()
+        let waiter = Task { await state.wait() }
+        try? await Task.sleep(for: .milliseconds(20))
+        let cancelled = ContinuousClock.now
+        waiter.cancel()
+        #expect(await waiter.value == nil)
+        #expect(ContinuousClock.now - cancelled < .milliseconds(500))
+        state.finish(ProcessExit(status: 0))
+        #expect(await state.wait() == ProcessExit(status: 0))
+    }
+}

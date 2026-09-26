@@ -30,6 +30,10 @@ public protocol SidecarProcess: AnyObject, Sendable {
     /// Writes to stdin (the stdin pipe stays open for as long as the process runs).
     func send(_ data: Data) throws
     /// Waits for the process to end; nil if the waiting task was cancelled first.
+    ///
+    /// **It must return promptly when its task is cancelled.** `ServerController` races it against the stop's grace
+    /// period in a task group, which waits for every child: an implementation that ignores cancellation hangs
+    /// `stop()`, and with it the app's quit, until the process ends. (`ExitState` does this right.)
     func waitForExit() async -> ProcessExit?
     /// SIGTERM: the sidecar stops cleanly.
     func terminate()
