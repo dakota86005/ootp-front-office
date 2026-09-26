@@ -733,6 +733,13 @@
           "name": {
             "type": "string"
           },
+          "views": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogView"
+            },
+            "description": "Its views in the sidebar's order (SWIFTUI_REBUILD.md section 3.5)."
+          },
           "head": {
             "$ref": "#/components/schemas/DepartmentHead",
             "description": "The person in the department's seat; null when the save names nobody there or the department has no one seat."
@@ -745,6 +752,7 @@
         "required": [
           "id",
           "name",
+          "views",
           "preparedBy"
         ]
       },
@@ -759,6 +767,23 @@
           "missingValue"
         ],
         "description": "Sentences the app shows wherever a served value is missing and no line of its own says why."
+      },
+      "CatalogView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The view's id inside its department (`fortyManOptions`), the Mac app's route."
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "description": "One view of a department, as the sidebar lists it."
       },
       "Cell": {
         "type": "object",

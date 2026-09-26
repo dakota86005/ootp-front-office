@@ -72,7 +72,7 @@ export type {
 // The catalog (`GET /api/v2/catalog`)
 export type {
   Catalog, GlossaryEntry, StatEntry, StatCatalogGroup, StatSection, ClubPalettes, CatalogClub, DepartmentHead,
-  CatalogDepartment, CatalogPhrases,
+  CatalogDepartment, CatalogView, CatalogPhrases,
 } from '../presentation/catalog.js';
 export type { StatFormat } from '../presentation/statCatalog.js';
 export type { ClubPalette } from '../presentation/palette.js';

@@ -26,10 +26,16 @@ public struct SidebarView: View {
     public var body: some View {
         List(selection: $window.selection) {
             ForEach(window.registry.departments) { department in
+                let served = model.catalog?.departments.first { $0.id.value2 == department.id.rawValue || $0.id.value1?.rawValue == department.id.rawValue }
                 DisclosureGroup(isExpanded: window.isExpanded(department.id)) {
                     ForEach(department.views) { view in
                         Label {
-                            Text(view.title)
+                            // The served name; the structural title only while the catalog is not there
+                            if let name = served?.views.first(where: { $0.id == view.id })?.name {
+                                Text(verbatim: name)
+                            } else {
+                                Text(view.title)
+                            }
                         } icon: {
                             Image(systemName: view.symbol)
                         }
@@ -38,7 +44,7 @@ public struct SidebarView: View {
                     }
                 } label: {
                     Label {
-                        Text(department.title)
+                        if let name = served?.name { Text(verbatim: name) } else { Text(department.title) }
                     } icon: {
                         Image(systemName: department.symbol)
                     }

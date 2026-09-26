@@ -72,9 +72,18 @@ export interface DepartmentHead {
   coachId: Integer;
 }
 
+/** One view of a department, as the sidebar lists it. */
+export interface CatalogView {
+  /** The view's id inside its department (`fortyManOptions`), the Mac app's route. */
+  id: string;
+  name: string;
+}
+
 export interface CatalogDepartment {
   id: DeptId;
   name: string;
+  /** Its views in the sidebar's order (SWIFTUI_REBUILD.md section 3.5). */
+  views: CatalogView[];
   /** The person in the department's seat; null when the save names nobody there or the department has no one seat. */
   head: DepartmentHead | null;
   /** The masthead line ("Prepared by Jeff Banister, bench coach"), or what the save does not say. */
@@ -99,16 +108,36 @@ export interface Catalog {
  * no one seat for the department). The seats and their names are the save's own, as the staff page shows them
  * (`STAFF_ROLE_LABELS`); a provisional owner call, SWIFTUI_REBUILD.md section 3.5.
  */
-const DEPARTMENTS: ReadonlyArray<{ id: DeptId; name: string; seat: StaffSeat | null; office: string }> = [
-  { id: 'frontOffice', name: 'Front Office', seat: 'general_manager', office: 'the front office' },
-  { id: 'majorLeague', name: 'Major League Ops', seat: 'bench_coach', office: 'the major league staff' },
-  { id: 'farm', name: 'Farm & Development', seat: null, office: 'the minor league staff' },
-  { id: 'scouting', name: 'Scouting', seat: 'head_scout', office: 'the scouting staff' },
-  { id: 'trades', name: 'Trades', seat: null, office: 'the front office' },
-  { id: 'finance', name: 'Finance', seat: null, office: 'the front office' },
-  { id: 'medical', name: 'Medical', seat: 'doctor', office: 'the medical staff' },
-  { id: 'league', name: 'League Office', seat: null, office: 'the front office' },
-  { id: 'philosophy', name: 'Philosophy & Staff', seat: null, office: 'the front office' },
+const DEPARTMENTS: ReadonlyArray<{ id: DeptId; name: string; seat: StaffSeat | null; office: string; views: ReadonlyArray<[string, string]> }> = [
+  { id: 'frontOffice', name: 'Front Office', seat: 'general_manager', office: 'the front office', views: [
+    ['morningReport', 'Morning Report'], ['storylines', 'Storylines'], ['briefing', 'GM Briefing'],
+  ] },
+  { id: 'majorLeague', name: 'Major League Ops', seat: 'bench_coach', office: 'the major league staff', views: [
+    ['report', 'Report'], ['positionPlayers', 'Position Players'], ['pitchingStaff', 'Pitching Staff'],
+    ['benchCoverage', 'Bench & Backups'], ['decision', 'Decision'], ['lineup', 'Lineup'],
+    ['pitchingAvailability', 'Pitching Availability'], ['scheduleGamePlans', 'Schedule & Game Plans'],
+    ['depthChart', 'Depth Chart'], ['fortyManOptions', '40-Man & Options'], ['rosters', 'Rosters'], ['seasonTrends', 'Season Trends'],
+  ] },
+  { id: 'farm', name: 'Farm & Development', seat: null, office: 'the minor league staff', views: [
+    ['report', 'Report'], ['organization', 'Organization'], ['affiliates', 'Affiliates'], ['assignments', 'Assignments'],
+    ['prospects', 'Prospects'], ['developmentTracking', 'Development Tracking'], ['decision', 'Decision'],
+  ] },
+  { id: 'scouting', name: 'Scouting', seat: 'head_scout', office: 'the scouting staff', views: [
+    ['draftBoard', 'Draft Board'], ['playerSearch', 'Player Search'],
+  ] },
+  { id: 'trades', name: 'Trades', seat: null, office: 'the front office', views: [['tradeDesk', 'Trade Desk']] },
+  { id: 'finance', name: 'Finance', seat: null, office: 'the front office', views: [
+    ['report', 'Report'], ['payrollBudget', 'Payroll & Budget'], ['contracts', 'Contracts'], ['freeAgents', 'Free Agents'],
+    ['horizonBoard', 'Horizon Board'],
+  ] },
+  { id: 'medical', name: 'Medical', seat: 'doctor', office: 'the medical staff', views: [['report', 'Report'], ['injuryReport', 'Injury Report']] },
+  { id: 'league', name: 'League Office', seat: null, office: 'the front office', views: [
+    ['wire', 'Wire'], ['clubReports', 'Club Reports'], ['usVsThem', 'Us vs Them'], ['standings', 'Standings'],
+    ['leaders', 'Leaders'], ['orgComparison', 'Org Comparison'], ['franchiseHistory', 'Franchise History'],
+  ] },
+  { id: 'philosophy', name: 'Philosophy & Staff', seat: null, office: 'the front office', views: [
+    ['organizationalPhilosophy', 'Organizational Philosophy'], ['coachingStaff', 'Coaching Staff'],
+  ] },
 ];
 
 /** The glossary as served: every term but those only the React app's pages use. */
@@ -168,7 +197,7 @@ export function servedClub(club: ClubSource): CatalogClub {
 /** Each department with its head, for the organization the app is about (null: no club is known yet). */
 export function servedDepartments(orgId: number | null): CatalogDepartment[] {
   return DEPARTMENTS.map((d) => {
-    const base = { id: d.id, name: d.name };
+    const base = { id: d.id, name: d.name, views: d.views.map(([id, name]) => ({ id, name })) };
     if (!d.seat) return { ...base, head: null, preparedBy: cell(`Prepared by ${d.office}`) };
     const reading = orgId === null ? null : seatHolder(orgId, d.seat);
     if (reading?.status === 'filled') {

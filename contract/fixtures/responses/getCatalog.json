@@ -1185,6 +1185,20 @@
     {
       "id": "frontOffice",
       "name": "Front Office",
+      "views": [
+        {
+          "id": "morningReport",
+          "name": "Morning Report"
+        },
+        {
+          "id": "storylines",
+          "name": "Storylines"
+        },
+        {
+          "id": "briefing",
+          "name": "GM Briefing"
+        }
+      ],
       "head": {
         "name": "Morgan Brock",
         "role": "General Manager",
@@ -1198,6 +1212,56 @@
     {
       "id": "majorLeague",
       "name": "Major League Ops",
+      "views": [
+        {
+          "id": "report",
+          "name": "Report"
+        },
+        {
+          "id": "positionPlayers",
+          "name": "Position Players"
+        },
+        {
+          "id": "pitchingStaff",
+          "name": "Pitching Staff"
+        },
+        {
+          "id": "benchCoverage",
+          "name": "Bench & Backups"
+        },
+        {
+          "id": "decision",
+          "name": "Decision"
+        },
+        {
+          "id": "lineup",
+          "name": "Lineup"
+        },
+        {
+          "id": "pitchingAvailability",
+          "name": "Pitching Availability"
+        },
+        {
+          "id": "scheduleGamePlans",
+          "name": "Schedule & Game Plans"
+        },
+        {
+          "id": "depthChart",
+          "name": "Depth Chart"
+        },
+        {
+          "id": "fortyManOptions",
+          "name": "40-Man & Options"
+        },
+        {
+          "id": "rosters",
+          "name": "Rosters"
+        },
+        {
+          "id": "seasonTrends",
+          "name": "Season Trends"
+        }
+      ],
       "head": {
         "name": "Rafael Dunn",
         "role": "Bench Coach",
@@ -1211,6 +1275,36 @@
     {
       "id": "farm",
       "name": "Farm & Development",
+      "views": [
+        {
+          "id": "report",
+          "name": "Report"
+        },
+        {
+          "id": "organization",
+          "name": "Organization"
+        },
+        {
+          "id": "affiliates",
+          "name": "Affiliates"
+        },
+        {
+          "id": "assignments",
+          "name": "Assignments"
+        },
+        {
+          "id": "prospects",
+          "name": "Prospects"
+        },
+        {
+          "id": "developmentTracking",
+          "name": "Development Tracking"
+        },
+        {
+          "id": "decision",
+          "name": "Decision"
+        }
+      ],
       "head": null,
       "preparedBy": {
         "display": "Prepared by the minor league staff"
@@ -1219,6 +1313,16 @@
     {
       "id": "scouting",
       "name": "Scouting",
+      "views": [
+        {
+          "id": "draftBoard",
+          "name": "Draft Board"
+        },
+        {
+          "id": "playerSearch",
+          "name": "Player Search"
+        }
+      ],
       "head": {
         "name": "Terry Ellis",
         "role": "Head Scout",
@@ -1232,6 +1336,12 @@
     {
       "id": "trades",
       "name": "Trades",
+      "views": [
+        {
+          "id": "tradeDesk",
+          "name": "Trade Desk"
+        }
+      ],
       "head": null,
       "preparedBy": {
         "display": "Prepared by the front office"
@@ -1240,6 +1350,28 @@
     {
       "id": "finance",
       "name": "Finance",
+      "views": [
+        {
+          "id": "report",
+          "name": "Report"
+        },
+        {
+          "id": "payrollBudget",
+          "name": "Payroll & Budget"
+        },
+        {
+          "id": "contracts",
+          "name": "Contracts"
+        },
+        {
+          "id": "freeAgents",
+          "name": "Free Agents"
+        },
+        {
+          "id": "horizonBoard",
+          "name": "Horizon Board"
+        }
+      ],
       "head": null,
       "preparedBy": {
         "display": "Prepared by the front office"
@@ -1248,6 +1380,16 @@
     {
       "id": "medical",
       "name": "Medical",
+      "views": [
+        {
+          "id": "report",
+          "name": "Report"
+        },
+        {
+          "id": "injuryReport",
+          "name": "Injury Report"
+        }
+      ],
       "head": {
         "name": "Ana Frey",
         "role": "Team Doctor",
@@ -1261,6 +1403,36 @@
     {
       "id": "league",
       "name": "League Office",
+      "views": [
+        {
+          "id": "wire",
+          "name": "Wire"
+        },
+        {
+          "id": "clubReports",
+          "name": "Club Reports"
+        },
+        {
+          "id": "usVsThem",
+          "name": "Us vs Them"
+        },
+        {
+          "id": "standings",
+          "name": "Standings"
+        },
+        {
+          "id": "leaders",
+          "name": "Leaders"
+        },
+        {
+          "id": "orgComparison",
+          "name": "Org Comparison"
+        },
+        {
+          "id": "franchiseHistory",
+          "name": "Franchise History"
+        }
+      ],
       "head": null,
       "preparedBy": {
         "display": "Prepared by the front office"
@@ -1269,6 +1441,16 @@
     {
       "id": "philosophy",
       "name": "Philosophy & Staff",
+      "views": [
+        {
+          "id": "organizationalPhilosophy",
+          "name": "Organizational Philosophy"
+        },
+        {
+          "id": "coachingStaff",
+          "name": "Coaching Staff"
+        }
+      ],
       "head": null,
       "preparedBy": {
         "display": "Prepared by the front office"

@@ -203,3 +203,25 @@ describe('a club list without every column (review N1)', () => {
     }
   });
 });
+
+describe('the departments\' names and views, served to the sidebar (review N11)', () => {
+  it('matches the Mac app\'s registry: every department and view id, in its order, with its structural fallback title', () => {
+    const sources = path.join(process.cwd(), 'macos', 'Packages', 'PennantFeatures', 'Sources');
+    const registry: Record<string, { title: string; views: Array<{ id: string; name: string }> }> = {};
+    for (const dir of fs.readdirSync(sources)) {
+      for (const file of fs.readdirSync(path.join(sources, dir)).filter((f) => f.endsWith('Department.swift'))) {
+        const swift = fs.readFileSync(path.join(sources, dir, file), 'utf8');
+        const id = /static let id: DeptID = "([^"]+)"/.exec(swift)?.[1];
+        const title = /static let title: LocalizedStringResource = "([^"]+)"/.exec(swift)?.[1];
+        if (!id || !title) continue;
+        registry[id] = { title, views: [...swift.matchAll(/placeholder\(id: "([^"]+)", title: "([^"]+)"/g)].map((m) => ({ id: m[1], name: m[2] })) };
+      }
+    }
+    const served = servedDepartments(null);
+    expect(Object.keys(registry).sort()).toEqual(served.map((d) => d.id).sort());
+    for (const d of served) {
+      expect(d.name, d.id).toBe(registry[d.id].title);
+      expect(d.views, d.id).toEqual(registry[d.id].views);
+    }
+  });
+});
