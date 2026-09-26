@@ -1,0 +1,168 @@
+import Foundation
+import OpenAPIRuntime
+import PennantAPI
+import Testing
+@testable import PennantKit
+
+/// The event client on the events the real server streamed (`contract/fixtures/events.sse`), and on the three
+/// readings: known events pass, an unknown type is ignored, a known type that did not decode is reported.
+@Suite("The event client")
+struct EventClientTests {
+    private func client(_ transport: RoutedTransport) -> Client {
+        PennantClient.make(port: 51_000, token: String(repeating: "t", count: 64), transport: transport)
+    }
+
+    @Test("the captured stream passes every event on as known, after connecting")
+    func capturedStream() async throws {
+        let sse = try String(decoding: fixtureData("events.sse"), as: UTF8.self)
+        let transport = RoutedTransport(["/api/v2/events": RoutedTransport.sse(sse)])
+        let collected = SignalLog()
+        try await EventClient(client: client(transport)).readOnce { collected.append($0) }
+        let signals = collected.signals
+        #expect(signals.first == .connected)
+        let types = signals.compactMap { signal -> String? in
+            if case .event(let event) = signal { event.typeName } else { nil }
+        }
+        #expect(types == ["hello", "import-started", "import-progress", "import-finished", "job"])
+        #expect(signals.contains { if case .malformed = $0 { true } else { false } } == false)
+    }
+
+    @Test("an unknown type is ignored, and a known one that did not decode is reported")
+    func readings() async throws {
+        let status = try String(decoding: fixtureData("responses/getStatus.json"), as: UTF8.self)
+            .replacingOccurrences(of: "\n", with: "")
+        let sse = [
+            ("hello", #"{"type":"hello","status":\#(status)}"#),
+            ("desk-changed", #"{"type":"desk-changed","count":3}"#),
+            ("import-progress", #"{"type":"import-progress","progress":"half"}"#),
+            ("export-pending", #"{"type":"export-pending","since":"2040-07-01T12:05:00.000Z"}"#),
+        ].map { "event: \($0.0)\ndata: \($0.1)\n\n" }.joined(separator: ": keep-alive\n\n")
+        let transport = RoutedTransport(["/api/v2/events": RoutedTransport.sse(sse)])
+        let unknown = SignalLog()
+        let events = EventClient(client: client(transport)) { unknown.appendUnknown($0) }
+        let collected = SignalLog()
+        try await events.readOnce { collected.append($0) }
+        let signals = collected.signals
+        #expect(signals.count == 4)
+        #expect(signals[0] == .connected)
+        guard case .event(let hello) = signals[1] else { Issue.record("hello"); return }
+        #expect(hello.value1?.status.app.name == "Pennant")
+        #expect(signals[2] == .malformed(type: "import-progress"))
+        guard case .event(let pending) = signals[3] else { Issue.record("export-pending"); return }
+        #expect(pending.value5?.since == "2040-07-01T12:05:00.000Z")
+        #expect(unknown.unknownTypes == ["desk-changed"])
+    }
+
+    @Test("when the stream ends while the server is up, it reconnects")
+    func reconnects() async throws {
+        let sse = try String(decoding: fixtureData("events.sse"), as: UTF8.self)
+        let transport = RoutedTransport(["/api/v2/events": RoutedTransport.sse(sse)])
+        let collected = SignalLog()
+        let events = EventClient(client: client(transport), reconnectDelay: .milliseconds(10))
+        let task = Task { await events.run { collected.append($0) } }
+        let reconnected = await eventually { transport.paths.count >= 3 }
+        task.cancel()
+        await task.value
+        #expect(reconnected)
+        #expect(collected.signals.filter { $0 == .connected }.count >= 2)
+        #expect(collected.signals.contains(.disconnected))
+    }
+
+    @Test("a connection that fails is retried the same way")
+    func retriesFailure() async throws {
+        let transport = RoutedTransport([:])
+        let collected = SignalLog()
+        let events = EventClient(client: client(transport), reconnectDelay: .milliseconds(10))
+        let task = Task { await events.run { collected.append($0) } }
+        let retried = await eventually { transport.paths.count >= 3 }
+        task.cancel()
+        await task.value
+        #expect(retried)
+        #expect(collected.signals.contains(.connected) == false)
+    }
+}
+
+/// Reconnecting with backoff, logged, and a clean stop (review N3); a bounded problem list (review N4).
+@Suite("Reconnecting to the event stream")
+struct EventReconnectTests {
+    private func client(_ transport: RoutedTransport) -> Client {
+        PennantClient.make(port: 51_000, token: String(repeating: "t", count: 64), transport: transport)
+    }
+
+    @Test("the wait doubles while connecting keeps failing, and stops at the cap")
+    func schedule() {
+        let events = EventClient(client: client(RoutedTransport([:])), reconnectDelay: .seconds(1), maxReconnectDelay: .seconds(10))
+        #expect((1...6).map { events.delay(afterFailures: $0) } == [1, 2, 4, 8, 10, 10].map { Duration.seconds($0) })
+    }
+
+    @Test("failures are logged, and the attempts slow down")
+    func failuresLoggedAndSlower() async {
+        let problems = SignalLog()
+        let transport = RoutedTransport([:])
+        let events = EventClient(
+            client: client(transport), reconnectDelay: .milliseconds(20), maxReconnectDelay: .milliseconds(160),
+            onError: { problems.appendUnknown($0) }
+        )
+        let task = Task { await events.run { _ in } }
+        try? await Task.sleep(for: .milliseconds(400))
+        task.cancel()
+        await task.value
+        // 20 + 40 + 80 + 160 … ms: about five attempts in 400 ms, where a fixed 20 ms would make twenty
+        #expect(transport.paths.count <= 7)
+        #expect(transport.paths.count >= 3)
+        #expect(problems.unknownTypes.first?.contains("failed") == true)
+    }
+
+    @Test("a stream that opened and then ended starts the wait again from the first step")
+    func resetsAfterConnecting() async throws {
+        let sse = try String(decoding: fixtureData("events.sse"), as: UTF8.self)
+        let transport = RoutedTransport(["/api/v2/events": RoutedTransport.sse(sse)])
+        let problems = SignalLog()
+        let events = EventClient(
+            client: client(transport), reconnectDelay: .milliseconds(20), maxReconnectDelay: .seconds(5),
+            onError: { problems.appendUnknown($0) }
+        )
+        let task = Task { await events.run { _ in } }
+        try? await Task.sleep(for: .milliseconds(300))
+        task.cancel()
+        await task.value
+        // Always connecting, so never slowed: many attempts, each logged as ended
+        #expect(transport.paths.count >= 6)
+        #expect(problems.unknownTypes.allSatisfy { $0 == "the event stream ended" })
+    }
+
+    @Test("cancelling (the server stopped) ends the loop at once, passing nothing more on")
+    func cleanStop() async {
+        let transport = RoutedTransport([:])
+        let collected = SignalLog()
+        let events = EventClient(client: client(transport), reconnectDelay: .seconds(30))
+        let task = Task { await events.run { collected.append($0) } }
+        #expect(await eventually { collected.signals.contains(.disconnected) })
+        let count = collected.signals.count
+        let cancelled = ContinuousClock.now
+        task.cancel()
+        await task.value
+        #expect(ContinuousClock.now - cancelled < .seconds(1))
+        #expect(collected.signals.count == count)
+    }
+
+    @Test("the app model keeps only the latest event problems")
+    @MainActor
+    func boundedProblems() async throws {
+        let configuration = try fakeConfiguration()
+        let model = AppModel(configuration: configuration)
+        for n in 0..<(AppModel.keptEventProblems + 15) { await model.handle(.malformed(type: "type-\(n)")) }
+        #expect(model.eventProblems.count == AppModel.keptEventProblems)
+        #expect(model.eventProblems.last?.type == "type-\(AppModel.keptEventProblems + 14)")
+    }
+}
+
+final class SignalLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _signals: [EventSignal] = []
+    private var _unknown: [String] = []
+    var signals: [EventSignal] { lock.withLock { _signals } }
+    var unknownTypes: [String] { lock.withLock { _unknown } }
+    func append(_ signal: EventSignal) { lock.withLock { _signals.append(signal) } }
+    func appendUnknown(_ type: String) { lock.withLock { _unknown.append(type) } }
+}

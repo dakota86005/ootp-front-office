@@ -477,9 +477,17 @@ api.get('/status', (_req, res: Response<ServerStatus>) => {
 /** Server-sent events for the Mac app: import, job and fresh-export news as it happens (`serverEvents.ts`). */
 api.get('/v2/events', eventStream(statusSnapshot));
 
+/**
+ * What `POST /api/config` and `POST /api/import` answer (409) while an import is running. Choosing a save used to clear
+ * the running flag and start a second import writing the same database at the same time; now nothing starts, and the
+ * caller waits for the running import to finish.
+ */
+export const IMPORT_RUNNING = 'An import is already running. Wait for it to finish, then try again.';
+
 api.post('/config', (req, res: Response<Ok | ApiError>) => {
   const { csvDir, saveName } = req.body as Partial<ConfigRequest>;
   if (!csvDir) return res.status(400).json({ error: 'csvDir is required' });
+  if (importState.importing) return res.status(409).json({ error: IMPORT_RUNNING });
   // A hand-picked .lg folder belongs to the save it was picked for
   const previous = loadConfig();
   saveConfig({ csvDir, saveName: saveName ?? null, lgPath: previous.csvDir === csvDir ? previous.lgPath ?? null : null });
@@ -498,6 +506,7 @@ api.post('/config', (req, res: Response<Ok | ApiError>) => {
 api.post('/import', (_req, res: Response<ImportAccepted | ApiError>) => {
   const config = loadConfig();
   if (!config.csvDir) return res.status(400).json({ error: 'No save configured' });
+  if (importState.importing) return res.status(409).json({ error: IMPORT_RUNNING });
   if (!fs.existsSync(config.csvDir)) {
     return res.status(400).json({ error: `CSV directory not found: ${config.csvDir}` });
   }

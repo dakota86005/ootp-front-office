@@ -52,3 +52,39 @@ jobs:
       # Only the versions Package.resolved names: a stale resolved file fails here instead of quietly re-resolving
       - run: swift build --force-resolved-versions
       - run: swift test --force-resolved-versions
+
+  pennant-mac:
+    # The Mac app (SWIFTUI_REBUILD.md sections 6 and 8): PennantKit's, PennantDesign's and PennantFeatures' Swift
+    # tests, and the app with its UI tests built unsigned. The server is not staged here (PENNANT_SKIP_SERVER=YES: no
+    # Node download), so the real-server integration tests and the XCUITests, which need it and a scratch league, run
+    # locally in macos/scripts/test.sh, as do the snapshots (skipped when CI is set). Only the versions the
+    # Package.resolved files name are used. No secrets.
+    name: Mac app (packages and app build)
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodebuild -version
+      - uses: actions/cache@v4
+        with:
+          path: |
+            macos/Packages/PennantKit/.build
+            macos/Packages/PennantDesign/.build
+            macos/Packages/PennantFeatures/.build
+            build/macos-ci/SourcePackages
+          key: pennant-mac-${{ runner.os }}-${{ hashFiles('macos/Packages/PennantKit/Package.resolved', 'macos/Packages/PennantFeatures/Package.resolved', 'macos/Pennant.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+      - name: PennantKit tests
+        working-directory: macos/Packages/PennantKit
+        run: swift test --force-resolved-versions
+      - name: PennantDesign tests
+        working-directory: macos/Packages/PennantDesign
+        run: swift test
+      - name: PennantFeatures tests
+        working-directory: macos/Packages/PennantFeatures
+        run: swift test --force-resolved-versions
+      - name: Build the app and its UI tests (unsigned, without the server)
+        run: >
+          xcodebuild -project macos/Pennant.xcodeproj -scheme Pennant -destination 'platform=macOS'
+          -derivedDataPath build/macos-ci/DerivedData -clonedSourcePackagesDirPath build/macos-ci/SourcePackages
+          -onlyUsePackageVersionsFromResolvedFile -skipPackagePluginValidation
+          CODE_SIGNING_ALLOWED=NO PENNANT_SKIP_SERVER=YES build-for-testing

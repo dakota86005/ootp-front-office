@@ -16,6 +16,7 @@ import {
   type PhilosophyProfile,
 } from './philosophy.js';
 import type { Integer } from './contract/primitives.js';
+import { currentOrganization, type CurrentOrganization } from './viewingOrganization.js';
 
 export const AI_FEATURES = ['briefing', 'trade', 'storylines', 'chat'] as const;
 export type AiFeatureId = (typeof AI_FEATURES)[number];
@@ -396,6 +397,8 @@ export interface SettingsResponse {
   settings: Settings;
   apiKey: ApiKeyStatus;
   dataDir: string;
+  /** The club the app is about: the configured organization, else the human-managed one (`viewingOrganization.ts`). */
+  organization: CurrentOrganization | null;
 }
 
 /** A provider on offer, with the model it would use (`GET /api/settings/providers`). */
@@ -412,7 +415,7 @@ export interface ProvidersResponse {
 export const settingsRoutes = Router();
 
 settingsRoutes.get('/settings', (_req, res: Response<SettingsResponse>) => {
-  res.json({ settings: loadSettings(), apiKey: apiKeyStatus(), dataDir: DATA_DIR });
+  res.json({ settings: loadSettings(), apiKey: apiKeyStatus(), dataDir: DATA_DIR, organization: currentOrganization() });
 });
 
 /**
@@ -509,8 +512,35 @@ settingsRoutes.put('/next-season-budget/:orgId', (req, res) => {
   res.json({ ok: true, nextSeasonBudget: amount });
 });
 
-settingsRoutes.post('/settings', (req, res) => {
-  const body = req.body as Partial<Settings>;
+/**
+ * What `POST /api/settings` takes: the preferences to change. A field left out keeps its value, and a value the
+ * handler cannot use is ignored. (Philosophy and next season's budget have routes of their own.)
+ */
+export type SettingsUpdate = Partial<
+  Pick<
+    Settings,
+    | 'autoImport'
+    | 'useTeamColors'
+    | 'roundRatingsToFive'
+    | 'showUnavailablePitchers'
+    | 'autoGenerateAfterImport'
+    | 'defaultOrgId'
+    | 'theme'
+    | 'provider'
+    | 'model'
+    | 'models'
+    | 'aiFeatures'
+  >
+>;
+
+/** What `POST /api/settings` answers: the preferences as saved. */
+export interface SettingsSaved {
+  ok: true;
+  settings: Settings;
+}
+
+settingsRoutes.post('/settings', (req, res: Response<SettingsSaved>) => {
+  const body = req.body as SettingsUpdate;
   const previous = loadSettings();
   const next: Settings = { ...previous };
   /*
@@ -523,8 +553,9 @@ settingsRoutes.post('/settings', (req, res) => {
    * is saved the moment it is declared.
    */
   for (const field of Object.keys(DEFAULTS) as Array<keyof Settings>) {
-    if (typeof DEFAULTS[field] === 'boolean' && typeof body[field] === 'boolean') {
-      (next[field] as boolean) = body[field] as boolean;
+    const value = (body as Partial<Settings>)[field];
+    if (typeof DEFAULTS[field] === 'boolean' && typeof value === 'boolean') {
+      (next[field] as boolean) = value;
     }
   }
   if (body.defaultOrgId === null || typeof body.defaultOrgId === 'number') {

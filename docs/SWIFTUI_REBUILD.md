@@ -3,7 +3,10 @@
 **Status:** design, 2026-09-25. Milestone N0 is done (2026-09-25: the restore point, the decisions D-055 to D-060 and
 the D-052 amendment, the behaviour cases, the ground rules; section 12). Milestone N1 is done (2026-09-25: the sidecar
 server, section 5; "As built" below). Milestone N2 is done (2026-09-25: the contract pipeline, section 4.3; "As built"
-there). Nothing else in this document is implemented yet. It supersedes the UI parts of the
+there). Milestone N3 is done (2026-09-26: the Xcode project and packages, the server inside the app, `ServerController`,
+`AppModel`, the event client, routes, the comparator, backups and the test script; then the window shell from the
+department registry, the commands, Setup and Settings; "As built at N3" in sections 3.1, 3.2, 3.6, 5.2, 5.3, 6, 7 and 8).
+Nothing else in this document is implemented yet. It supersedes the UI parts of the
 V2 web plan (`~/.claude/plans/okay-can-we-please-effervescent-cherny.md`, sections 3 and 4). The server-side
 parts of that plan (the Front Office contract, the Club Profile, the roster map, the horizon board, the league
 wire, snapshots and the GM's desk) carry over unchanged in intent and are scheduled here.
@@ -110,6 +113,27 @@ A visual mockup (HTML imitation of the SwiftUI look) is at <https://claude.ai/ar
 The last route, the inspector's visibility, table column settings and open player windows are restored per
 window (`@SceneStorage`, `TableColumnCustomization` is `Codable`, `.restorationBehavior`).
 
+**As built at N3 (2026-09-26).** Three scenes exist: main windows (`WindowGroup(id: "main")`, several allowed), Setup
+(`Window(id: "setup")`, not restored) and Settings (General, Appearance, AI; Updates arrive with N14). Each main window keeps
+its route with its Back/Forward history, the inspector's and the sidebar's visibility and its open departments in
+`@SceneStorage` (`MainWindowModel.restore`); a route this build does not know falls back to the first department's first
+view. The Setup window opens by itself once per launch when the server is up with no save chosen (served `configured`),
+and again from Club ▸ Import Export… or Settings ▸ Choose Save…. Its steps are React's first run: the saves the server
+found (`/api/saves`) and where it looked (`/api/search-locations`), or a folder typed or picked (`/api/resolve-folder`);
+choosing one (`POST /api/config`) starts the import, which the window follows from the served status (a determinate bar
+from the served file counts); then the clubs as served, the one the save's human manages first and the served club
+preselected, saved with `POST /api/settings` (added to the contract at N3 as `saveSettings`). The club step comes only
+after a new import landed (the served last import's finish time moved); an import that failed, stopped partway (served
+`importInterruptedSince`) or never began is shown with Try Again. Nothing is chosen while an import runs, and the server
+refuses a second one: `POST /api/config` and `POST /api/import` answer 409 with a plain sentence while an import runs
+(added at N3; choosing a save used to start a second import writing the same database). Settings' General has the OOTP
+save (name, export, Choose Save…, Import Now), the club, the transaction log's `.lg` folder named by hand
+(`POST /api/save-source`, with a caption saying what it is for), the data status's served headline, reasons, action and
+dates, and the data folder with Restore Backup (confirmed, all or nothing, not during an import); Appearance writes the
+served `theme` and applies it to every window once saved; AI lists each provider's key status, read only until N13. A
+request that fails shows the server's sentence, or one of three structural lines ("Couldn't reach the Pennant server",
+"The Pennant server isn't running", "The request failed") with the raw error in the help tag and the log, never as text.
+
 ### 3.2 The main window
 
 - **Sidebar** (`NavigationSplitView`; floats as glass automatically on macOS 26+):
@@ -135,6 +159,17 @@ window (`@SceneStorage`, `TableColumnCustomization` is `Codable`, `.restorationB
   - the **staff** tab: chat about the selection.
 
   Controls use `.controlSize(.small)`.
+
+**As built at N3 (2026-09-26).** The sidebar comes from the department registry (section 6): the club card (the served
+club's name on its served colours, "Your club" or "Chosen in Settings"; no logo or record yet, neither is served;
+neutral, with the system fill and primary text, when no colour is served, team colours are off (served `useTeamColors`),
+or no text reaches 4.5:1 (7:1 under Increase Contrast) on the served fill), then each department disclosing its views, with a `badge(from:)` hook that draws nothing until the desk (N7). Following waits
+for N7. Every view is a structural placeholder ("Arrives in a later build"). The toolbar holds Back and Forward, the
+view's title, a subtitle made only of served values (the imported export's game date and the data status's own
+headline; else the last import's time; else nothing), the search field (no results yet), Ask Staff (disabled until N13)
+and the inspector toggle. The inspector has its evidence tab, empty. While the server is not ready the window shows its
+state instead (starting, restarting, failed with the server's sentence, the folder in use, the backup that failed, a
+Debug build with no folder chosen), with Show Log and Try Again; with no save chosen it offers Setup.
 
 ### 3.3 The four layers of depth, done the Mac way
 
@@ -198,7 +233,7 @@ The department's views sit beneath it in the sidebar.
 | Department (head from the save) | Views |
 |---|---|
 | **Front Office** (GM) | Morning Report · Storylines (AI) · GM Briefing (AI) |
-| **Major League Ops** (bench coach) | Report · Position players · Pitching staff · Bench & coverage · Decision · Lineup · Pitching availability · Schedule & game plans · Depth chart · 40-man & options · Rosters · Season trends |
+| **Major League Ops** (bench coach) | Report · Position players · Pitching staff · Bench & backups (named "Bench & coverage" until N3: "coverage" is on the banned-jargon list, meant for interval coverage; the owner decides the name) · Decision · Lineup · Pitching availability · Schedule & game plans · Depth chart · 40-man & options · Rosters · Season trends |
 | **Farm & Development** (minor league staff) | Report · Organization · Affiliates · Assignments · Prospects · Development tracking · Decision |
 | **Scouting** (scouting director) | Draft board · Player search |
 | **Trades** (assistant GM) | Trade desk (offers, builder, analysis, league fits) |
@@ -229,6 +264,13 @@ The department's views sit beneath it in the sidebar.
   - each cell shows who is controlled and how;
   - prospects sit in a pipeline lane with their readiness range, never placed in a season;
   - a committed-payroll line runs against a budget `RuleMark`.
+
+**As built at N3 (2026-09-26).** The menus: Go (the departments ⌘1 to ⌘9 in the registry's order, Back ⌘[, Forward ⌘]),
+View (Show Sidebar ⌃⌘S from `SidebarCommands`, Show Inspector ⌥⌘I), Club (Refresh Data ⌘R: an import, after which every
+store reloads on the moved import stamp, as React's refresh reloads the page; Import Export…: Setup at the save step;
+Data Status: Settings ▸ General at the data status) and Help ▸ Server Log. Go and View act on the key main window through
+`@FocusedValue`; what can act is `CommandAvailability`, tested. Find Anything, the Player menu, search tokens, drag and
+drop and context menus arrive with the views that need them.
 
 ### 3.7 Visual language
 
@@ -339,7 +381,7 @@ Everything new lives under `/api/v2/`, so the React app keeps working on the old
 |---|---|---|
 | Types | `server/contract/index.ts` | Re-exports the server's own types; a reused route that answered an untyped object now has an exported type beside its handler, which is typed against it (`ServerStatus`, `ImportAccepted`, `Ok`, `ApiError`, `SearchLocations`, `SaveSourceResult`, `SettingsResponse`, `ProvidersResponse`, `Org`, the request bodies). Payloads unchanged. `GameDate` lives beside `parseGameDate` and types the data status's game dates. `Integer` (`server/contract/primitives.ts`, `@asType integer`) types ids and counts, so Swift reads `Int`; a true decimal stays `number`. |
 | Operations | `server/contract/routes.ts` | `GET /api/v2/events` (stream), and the reused `GET /api/status`, `POST /api/import`, `GET /api/saves`, `GET /api/search-locations`, `POST /api/resolve-folder`, `POST /api/config`, `GET /api/data-status`, `POST /api/save-source`, `GET /api/settings`, `GET /api/settings/providers`, `GET /api/orgs`. The other legacy routes are not described. |
-| Build | `npm run contract:build` (`scripts/lib/contractSpec.ts`) → `contract/openapi.json` | OpenAPI 3.1, deterministic. A string union of two or more values becomes `anyOf: [{type: string, enum}, {type: string}]`; a single literal (an event's `type`) stays a one-value enum. A union of types (`number \| string \| null`, as `Row.sort` will be) becomes one `anyOf` member per type, `"null"` on the last (the generator reads only a `type` array's first type). `X \| null` is written the way swift-openapi-generator reads it: `type: [T, "null"]` inline, or the reference alone with the property left out of `required` (a `{type: "null"}` member makes the generator drop the property). So the published spec is looser than the server there (the strict form the tests use keeps `required`), and Swift cannot tell a missing field from a null one: a future request body (the desk's PUT, N7) must not give "absent" and "null" different meanings. No `additionalProperties: false`. Bearer security. The build refuses two different types with one name, and an exported generic: export a concrete alias instead (`export type ClaimRow = Row<Claim>`), which becomes one named component. |
+| Build | `npm run contract:build` (`scripts/lib/contractSpec.ts`) → `contract/openapi.json` | OpenAPI 3.1, deterministic. A string union of two or more values becomes `anyOf: [{type: string, enum}, {type: string}]`; a single literal (an event's `type`) stays a one-value enum. A union of types (`number \| string \| null`, as `Row.sort` will be) becomes one `anyOf` member per type, `"null"` on the last (the generator reads only a `type` array's first type). `X \| null` is written the way swift-openapi-generator reads it: `type: [T, "null"]` inline, or the reference alone with the property left out of `required` (a `{type: "null"}` member makes the generator drop the property). So the published spec is looser than the server there (the strict form the tests use keeps `required`), and Swift cannot tell a missing field from a null one: a future request body (the desk's PUT, N7) must not give "absent" and "null" different meanings. *As built at N3:* the generated client never encodes an explicit `null` either (a nil optional is left out), so no request can clear a field by sending null; clearing needs an explicit request field or a `/v2` route (`SettingsUpdate.defaultOrgId` cannot go back to "automatic"). No `additionalProperties: false`. Bearer security. The build refuses two different types with one name, and an exported generic: export a concrete alias instead (`export type ClaimRow = Row<Claim>`), which becomes one named component. |
 | Events | `ServerEvent` in the spec; `ServerEventReading` in PennantAPI | Each event is a named component, and `ServerEvent` is their `anyOf` with `UnknownServerEvent` (`{type: string}`) last. The generator makes a struct of optionals, one per shape, and never throws: a known event fills its own and the catch-all; an unknown one, or a known one whose payload did not decode, fills only the catch-all. `event.reading` tells them apart from the generated types: `known`, `unknown(type:)` (ignore it) or `malformed(type:)` (a type this build knows that did not decode: the N3 event client reports it and re-reads `/api/status`, never ignores it). The stream's response is `text/event-stream` with no schema (the generator's pattern); the client decodes with `asDecodedServerSentEventsWithJSONData(of: Components.Schemas.ServerEvent.self)`. |
 | Tests | `tests/contract.test.ts`, `tests/bannedJargon.ts`, `tests/apiRoutes.ts`, `tests/contractShapes/` | The committed spec equals a fresh build. Every `/v2` route (a sub-router's mount path included) is in `routes.ts` and every listed operation is registered and in the spec, both ways; a reused route is described only when listed. Every JSON GET answers the synthetic save in its strict shape (ajv 2020, enums closed, `unevaluatedProperties: false`); each POST is checked in the answers safe to cause in a temporary data folder (its 400s; `resolve-folder` and `save-source` also 200), but not the 200s of `config` and `import`, which would start an import. The hello, an import and a job on the live stream validate. The answers and events are captured, made stable, into `contract/fixtures/` (`npm run contract:fixtures` rewrites them; the test fails while they differ), and the Swift tests decode those same bytes. The banned-jargon list applies to every `/v2` `text`, `hint` and `display`; it was tuned on Player Value's pages, so before department copy moves (N8) it needs a scoped exception (per field or department) for plain words it would reject ("Win Pct", "prior season", "waiver priority"), never a weakened pattern. |
 | Swift | `macos/Packages/PennantAPI` | swift-openapi-generator 1.13.1 as a build plugin (types and client, public, idiomatic names) over a link to `contract/openapi.json`; runtime 1.12.1, URLSession transport 1.3.1; `BearerTokenMiddleware`, `ServerEventReading`. A second test target, `ContractShapesTests`, generates types from the tests' shape contract (`tests/contractShapes/`) to prove shapes the contract will need (a number-or-string sort key, an `Int`, a concrete alias of a generic). macOS 26, swift-tools-version 6.2. CI builds and tests it on `macos-26` with `--force-resolved-versions`, caching `.build`. The package imports `HTTPTypes` and `OpenAPIRuntime` through the approved packages without declaring swift-http-types. |
@@ -413,6 +455,27 @@ answered, better-sqlite3 loaded, and the calibration refit worker ran from besid
 
 A stable Developer ID signature means these prompts and Keychain prompts appear once, not on every update.
 
+**As built at N3, Stage A (2026-09-26).**
+- `npm run mac:stage` (`macos/scripts/stage-server.sh`) stages `build/macos-server/` in the bundle's layout: the pinned
+  Node binary as `Helpers/pennant-server`, and in `Resources/server/` the sidecar bundle (`server.cjs`, both refit
+  workers, `package.json`), Node's licence (`NODE_LICENSE`) and a production `node_modules` (no `electron-updater`;
+  every version as `package-lock.json` pins it). The install runs in its own folder (`build/macos-server-install/`) with
+  the pinned binary first on `PATH`, so better-sqlite3 is built for that Node and the repository's own `node_modules`
+  (whichever ABI it holds) is never touched; the `.forge-meta` trap cannot reach it. The install is reused until the
+  lockfile, the runtime dependencies or the Node version change. Pruned: better-sqlite3's sources and build
+  intermediates, type declarations, source maps and READMEs. About 150 MB, 116 MB of it Node.
+- The Pennant target's last phase, "Embed the server" (`macos/scripts/embed-server.sh`), sets `CFBundleShortVersionString`
+  and `CFBundleVersion` from `package.json` (the one place the version lives), copies the stage into the bundle, and
+  fails naming `npm ci && npm run mac:stage` when the stage is missing or stale: another version, a server source newer
+  than its bundle, or a content stamp (`macos/scripts/stage-stamp.sh`: `build/sidecar/`, `package-lock.json`, the Node
+  version) that differs from the stage's. A build that signs
+  signs inside out: each `.node`, then the Node binary with the hardened runtime and only `allow-jit` and
+  `allow-unsigned-executable-memory` (`macos/Support/pennant-server.entitlements`); Xcode signs the app last.
+  `PENNANT_SKIP_SERVER=YES` builds an app without a server (CI); it starts and says the server is missing.
+- Development builds sign automatically with the owner's Apple Development identity on team `6T7RV2A4DQ`; no
+  provisioning profile is needed, since the app has no restricted entitlement. Secure timestamps and notarization wait
+  for N14.
+
 ### 5.3 Lifecycle (`ServerController`, a Swift actor)
 
 1. **Spawn** with these variables:
@@ -441,6 +504,46 @@ A stable Developer ID signature means these prompts and Keychain prompts appear 
    and checks all of it. Making the import itself all-or-nothing (one transaction, or staging tables swapped in at
    the end) remains possible later; it was not needed for safety.
 4. **Logs:** captured to `~/Library/Logs/Pennant/server.log` (rotated), viewable from Help ▸ Server Log.
+
+**As built at N3, Stage A (2026-09-26).** `ServerController` (PennantKit) holds each step; `ServerControllerTests` drive it
+with scripted processes, and `ServerIntegrationTests` with the real staged server on the synthetic league.
+- The child gets only `HOME`, `USER`, `LOGNAME`, `TMPDIR`, `LANG`, `LC_ALL`, a fixed `PATH` and the five variables. The
+  app's own environment is not passed on, so a provider key exported in a shell cannot outrank the Keychain's. The
+  handshake carries a fresh 64-character token and the keys read from the Keychain (`com.dakotawise.pennant.apikeys`,
+  one generic password per provider id; saving a key arrives with N13). The read is asynchronous, on a detached task,
+  and happens before anything is spawned, so a slow Keychain delays the start but never the handshake. It is meant not
+  to prompt (`interactionNotAllowed`), but that governs the data-protection keychain, while the query searches the
+  login keychain, where an item whose access list does not trust the build could still show the system's dialog.
+- Before anything is spawned, every launch (the first start, Try Again from any state, a crash restart, a start after
+  a restore) passes two gates in the controller, so no caller can skip them: a development build must have a chosen
+  data folder (section 6), and the folder's first-run backup must be recorded or taken now (section 7.5). A folder
+  held by another running server with no backup yet is shown as locked and nothing starts; a backup that fails is
+  `.failed(.backupFailed)` and nothing starts.
+- Ready means `PENNANT_READY` within 30 s and then `GET /api/status` (three tries, half a second apart). No ready line
+  in time, or a status that never answers, is a failure (the process is stopped), not a crash to retry: a hang does
+  not cure itself. A server judged unusable, or being stopped, is never published as ready: a late ready line or a
+  status answer that arrives while it ends finds no launch phase to be confirmed from.
+- Exit code 3 (or `reason: "locked"`) shows the server's own sentence naming the holder, and is not retried; exit code
+  2 is a failure; exit code 1 with a `PENNANT_FAILED` sentence is shown at once (`.startFailed`), since waiting does not
+  cure its reason. Anything else is a crash: the wait doubles per crash in a row, 1 s to 30 s (a server that ran for a
+  whole two minutes starts the count again), and five crashes inside two minutes stop the restarts. Try Again forgets
+  them.
+- Quit goes only through `QuitCoordinator` (PennantKit). `applicationShouldTerminate` returns `.terminateLater`; the
+  server is stopped (SIGTERM, 5 s, SIGKILL) on a detached task and the reply is delivered through the main run loop, so
+  neither needs the main dispatch queue, which the nested run loop `.terminateLater` waits in cannot drain while it is
+  inside a main-queue job (every main-actor `Task` is one). Asking to quit (`requestQuit()`, used by the SIGTERM
+  handler and every future Quit) schedules `NSApp.terminate` on the main run loop for the same reason. A second request
+  while a reply is owed is cancelled. When the app is killed outright, the server sees stdin close and stops itself,
+  releasing the lock (checked on a real build).
+- stdout is read with a readability handler, a line at a time: `FileHandle.bytes.lines` held the ready line back until
+  the pipe closed.
+- `server.log` rotates at 5 MB and keeps three older files; the token and keys are never written (the handshake is on
+  stdin, which is not logged). The failure screen's Show Log opens it; the Help menu item comes with the menus.
+- The event client (`EventClient`) passes known events on, ignores a type this build has never heard of (logging it),
+  reports a known type that did not decode and re-reads `/api/status` (the model keeps the latest 20 such reports),
+  and reconnects while the server is up: each failed or ended connection is logged, and the wait doubles from 1 s to
+  at most 10 s while connecting keeps failing, starting again from 1 s after a connection that opened. Cancelling it
+  (the server stopped) ends it at once.
 
 ---
 
@@ -496,6 +599,64 @@ A stable Developer ID signature means these prompts and Keychain prompts appear 
   - A number shown is a number served.
   - A script scans the String Catalog with the same banned-jargon list.
 
+**As built at N3, Stage A (2026-09-26).**
+- `macos/Pennant.xcodeproj`, written by hand: folder-synchronized groups (`Pennant/`, `PennantUITests/`; `Support/` and
+  `scripts/` are shown but belong to no target), one shared scheme `Pennant`, Debug (`com.dakotawise.pennant.dev`,
+  "Pennant Dev") and Release (`com.dakotawise.pennant`), arm64 only. The app is Swift 6 with `MainActor` default
+  isolation and Approachable Concurrency; the UI-test target is `nonisolated`, XCTest's own isolation. Hardened runtime,
+  no App Sandbox. `Support/Info.plist` adds only the three exported drag types to the generated Info.plist.
+- Packages: PennantAPI (N2); **PennantKit** (`ServerController`, `SidecarProtocol`, `RestartPolicy`, `ServerLog`, the
+  Keychain key source, `PennantClient`, `EventClient`, `AppModel`, `CurrentClub`, `BackupManager`,
+  `QuitCoordinator`, the routes, `UnknownLast`, `ServedFormat`); **PennantDesign** (only `ServedColor`, a served hex
+  colour, so far). PennantKit keeps Swift's default nonisolated isolation, since it holds an actor and value types used from both sides (`AppModel` is
+  `@MainActor` by name); PennantDesign uses `MainActor` like the app. No new dependency: PennantKit names the approved
+  runtime and URLSession packages directly.
+- `AppModel` holds the server's state, the status (kept current by events), settings, clubs, the current club, the
+  data status, the import under way, and `importStamp`: the last import's finish time, which moves only when a new
+  import lands. The current club is the server's: `GET /api/settings` serves `organization` (`{id, source}`, from
+  `server/viewingOrganization.ts`: the configured organization, else the human-managed one, the rule every server view
+  uses), and `CurrentClub` only finds it in `/api/orgs` for its name and colours; a configured club the list no longer
+  has stays that club, shown as not found.
+- **How stores reload (the plan for every department store):** a store keys its data on `AppModel.storeKey`
+  (`.task(id: model.storeKey)`): the import stamp, the current club and the count of backup restores. It is nil until
+  the server is ready and its settings are read, so a store loads once at launch; a new import, a club change in
+  Settings and a restore each move it. A store keeps its last good data while a reload is under way.
+- Routing: `AppRoute` (an open `DeptID` and a view id), `PlayerRef`, `ClubRef` and `ComparisonRef`, all `Codable`,
+  `Hashable` and `Transferable` (as `com.dakotawise.pennant.player`, `.club` and `.comparison`).
+- The unknown-last comparator orders numbers by value and strings by UTF-16 code units (as JavaScript compares them),
+  every number before every string, unknown last in both directions, ties in the order served.
+  `contract/fixtures/sort-cases.json` is run by `tests/sortCases.test.ts` (a TypeScript reference) and by
+  `UnknownLastTests`.
+- `ServedFormat` formats only a served count or share that has no display string (an import's progress).
+- A Debug build must be told its data folder (`ServerConfiguration.development`, compiled into Debug only): a scratch
+  folder (`PENNANT_DEV_DATA_DIR` or the launch argument `-PennantDevDataFolder`; the log in `PENNANT_DEV_LOG_DIR`, else
+  `logs/` inside it), or the real one on purpose (`PENNANT_DEV_USE_REAL_DATA=1` or `-PennantUseRealDataFolder YES`).
+  With neither it starts no server and says "No data folder chosen for this development build", naming both. A
+  Release build always uses the real folder.
+- Tests and `#Preview`s read `contract/fixtures/` where it is, by path; `macos/Fixtures/` was not needed.
+- The String Catalog (`Pennant/Localizable.xcstrings`) holds structural labels only; `tests/stringCatalog.test.ts`
+  checks every key and translation against `tests/bannedJargon.ts`.
+
+**As built at N3, Stage B (2026-09-26).**
+- **PennantFeatures** (`macos/Packages/PennantFeatures`): `FeatureCore` (`DepartmentModule`, `DepartmentViewDescriptor`,
+  `DepartmentRegistry`, `NavigationHistory`, the placeholder, the import progress view, `ServedText`), one target per
+  department (FrontOffice, MajorLeague, Farm, Scouting, Trades, Finance, Medical, League, Philosophy; each exports a
+  module whose views are section 3.5's), `Shell` (the main window, sidebar, toolbar, inspector, server states,
+  `MainWindowModel`, `AppRouting`, `CommandAvailability`, Settings, fixture-fed previews) and `Setup` (`SetupModel`, a
+  tested state machine, and its window). Player and StaffRoom join when first needed. `badge(from:)` takes the
+  `AppModel` (which will hold the desk's served counts) rather than a `FrontOfficeSummary`, which is not served yet.
+- The app target is thin: `Registry.swift` assembles the registry from the nine modules (checked in Debug), the scenes,
+  `@SceneStorage`, and `PennantCommands`.
+- The packages' views look their labels up in the app's bundle, so the app's one String Catalog holds every structural
+  label, and `tests/stringCatalog.test.ts` fails when a label in the Swift sources is missing from it. Section 3.5's
+  "Bench & coverage" is "Bench & Backups": "coverage" is on the banned-jargon list (the owner decides the name). The
+  sidebar is 270 to 380 pt wide (ideal 280) so every view title fits at the default text size (`SidebarWidthTests`).
+  `RequestProblem` (PennantKit) and `ProblemLine` (FeatureCore) turn a failed request into the server's sentence or a
+  structural line, the raw error going to the log.
+- **PennantDesign** gained `ClubTint` (the served club colours, with text held to WCAG 4.5:1, or 7:1 under Increase
+  Contrast; no served colour means the accent) and `ClubCard`. Tone colours wait for N5, which first needs them.
+- Contract: `POST /api/settings` (`saveSettings`: `SettingsUpdate` in, `SettingsSaved` out, typed beside the handler).
+
 ---
 
 ## 7. Coexistence and the way back
@@ -524,6 +685,15 @@ The rebuild is one big rewrite, but it is built so that *any* point can be aband
    `backups/pre-swiftui-<date>/`.
    - `league.db` (1.28 GB) is re-importable and isn't copied.
    - A Settings button restores the backup.
+   - *As built at N3, Stage A (`BackupManager`):* `history.db` is copied with its `-wal` and `-shm`, which with no
+     server running make a consistent database. `ServerController` takes it before every launch, so Try Again and
+     restarts cannot skip it. A folder whose `server.lock` names a running process (the Electron app) is not backed up
+     then, nor recorded, and no server is started on it: once that app quits, Try Again backs up first. A backup that
+     fails starts no server, and its partial folder is removed. `backups/pre-swiftui.json` records the backup, so it
+     happens once per folder. A restore is all or nothing: it checks that every recorded file is in the backup and
+     readable, copies them into a staging folder inside the data folder, then moves the files it replaces (a stale
+     `-wal` included) to `backups/before-restore-<time>/` and the copies into place; any failure moves everything back.
+     The app stops the server before and starts it after. The Settings button arrives in Stage B.
 6. **Identities:**
    - Development builds are `com.dakotawise.pennant.dev` ("Pennant Dev"), so they can sit beside anything.
    - The release app uses `com.dakotawise.pennant`. No Electron installer was ever published, so D-049's hold
@@ -559,7 +729,23 @@ The rebuild is one big rewrite, but it is built so that *any* point can be aband
     as attachments (extracted with `xcrun xcresulttool`, so no screen-recording permission is needed) and
     running **`performAccessibilityAudit`**.
 - **Fixtures:** generated by running the server against the **synthetic save** (`tests/syntheticSave.ts`) and
-  dumping the v2 responses to `macos/Fixtures/`. No private save data is ever committed.
+  dumping the v2 responses to `macos/Fixtures/`. No private save data is ever committed. *(As built at N2 and N3: the
+  responses are captured into `contract/fixtures/`, which the Swift tests and previews read in place.)*
+- *As built at N3, Stage A:* `macos/scripts/test.sh` writes the synthetic league into a scratch folder
+  (`npm run synthetic:league`), stages the server, runs every package's Swift tests (PennantKit's include the real-server
+  integration test), then `xcodebuild test` on the Pennant scheme with the app on a fresh scratch data folder, and
+  extracts the XCUITest screenshots into `build/macos-test/screenshots/`. The XCUITests need UI automation, which the
+  Mac's owner enables once (it asks for a password); until then they cannot drive the app. CI builds the app and its UI
+  tests unsigned without the server, and runs the package tests.
+- *As built at N3, Stage B:* the XCUITests (start and quit; Setup on a pretend save through the import to a saved club;
+  every department by ⌘1 to ⌘9 and the sidebar, Back/Forward, the inspector, `performAccessibilityAudit`, Settings' tabs,
+  each on a data folder of its own) are written and compile, but have not run yet: they need UI automation, which the
+  owner has been asked to enable. PennantFeatures' tests draw snapshots of the sidebar with the club card, the main
+  window, every server state, every Setup step and every Settings tab, light and dark at their real sizes, into
+  `build/macos-snapshots/` (skipped on CI). They host each view in an off-screen window and draw it with `cacheDisplay`,
+  which draws the AppKit-backed controls `ImageRenderer` cannot; the split view's floating glass sidebar does not draw that
+  way, so the main window's pictures lay the sidebar, drawn on its own, over its column, and a selected row's highlight
+  draws black. A real-server test runs the Setup flow end to end.
 - **Manual matrix per milestone:**
   - light and dark; Reduce Transparency; Increase Contrast; Reduce Motion; VoiceOver spot check;
   - window widths 900, 1280 and 1728+;
@@ -590,7 +776,7 @@ sizes, not dates.
 | **N10** | Farm & Development | Server: farm copy, Prospects words and Development movers moved. App: Overview, Organization, Affiliates, Assignments, Decision, Prospects, Development tracking | 5 |
 | **N11** | Player windows and comparison | Dossier (Overview, Ratings, Value with Swift Charts ranges, Contract & rights, History, notes), Compare window, drag and drop | 3 |
 | **N12** | Finance, Trades, Scouting, Medical, League Office, Philosophy | Payroll (Charts plus budget rule), Contracts, Free agents, Horizon; Trade builder (drop targets, range charts, existing AI evaluation); Draft and Search (tokens); Injuries; Standings (odds and posture with basis), Leaders, Org comparison, Franchise; Philosophy editor with the server-side identity endpoint; Coaching staff | 6 |
-| **N13** | AI surfaces, native | Staff room (SSE streaming, markdown via `AttributedString`, server-provided player links), Storylines, GM Briefing; keys in the Keychain. Behaviour unchanged | 2 |
+| **N13** | AI surfaces, native | Staff room (SSE streaming, markdown via `AttributedString`, server-provided player links), Storylines, GM Briefing; keys in the Keychain (decide then between the data-protection keychain, which needs an application-identifier entitlement and so a provisioning profile, and the login keychain, whose per-item access lists can prompt; N3 only reads). Behaviour unchanged | 2 |
 | **N14** | macOS integration and release | App Intents and Spotlight, widgets (App Group), menu bar extra (optional), Sparkle with appcast on GitHub Releases (`pennant-v*`), notarized DMG pipeline | 3 |
 | **N15** | Acceptance and cutover | Accessibility audit, Instruments pass, parity checklist against the React app (every field, every hover), acceptance by the owner and his brother; then the **cutover PR** (delete `src/`, `electron/`, the web tests and dependencies; docs), and merge to `main` with the owner's approval | 3 |
 
@@ -683,10 +869,28 @@ then-current release in the same major version.
 **N2 is done (2026-09-25):** the contract pipeline, on `feature/swiftui-n2-contract` with its PR into `feature/swiftui`
 (section 4.3, "As built").
 
-**Next: N3, the app skeleton** (sections 6 and 9). Open a fresh session on `feature/swiftui` (after the N2 PR merges)
-and say **"Continue the SwiftUI rebuild at N3 (docs/SWIFTUI_REBUILD.md)."** Branch `feature/swiftui-n3-skeleton` from
-`feature/swiftui` and open its PR into `feature/swiftui`. N3 builds on PennantAPI and the operations N2 described; a
-route the skeleton needs that is not in `server/contract/routes.ts` is added there first, then `npm run contract:build`.
+**N3 is done (2026-09-26):** the app skeleton, on `feature/swiftui-n3-skeleton` with its PR into `feature/swiftui`
+(sections 3.1, 3.2, 3.6, 5.2, 5.3, 6, 7 and 8, "As built at N3"). What the shell wanted to say and the server does not
+serve yet waits for N4:
+- the data status's codes in words (the level, each source's state and lag, why the log is unavailable, how the save was
+  found);
+- a sentence for a value that is missing (rows whose served value is null are left out for now);
+- the import's phase in words, and a display name for the table being written (the raw OOTP file name is only in the help
+  tag);
+- why a chosen save did not start importing, and why an import did not finish (the window says so structurally);
+- the words for where an AI key comes from (Keychain, environment, data folder), mapped from the served code for now;
+- the club card's record and logo;
+- a display form of the game date in the subtitle (it is shown as served, unpadded as OOTP writes it);
+- the sentences for failed requests: the app shows three structural lines, and the server could say more.
+
+A contract rule found at N3: the generated client never sends an explicit `null` (an optional field left nil is left
+out), so a request cannot clear a field by sending null. `defaultOrgId` cannot go back to "automatic" from the Mac app.
+Clearing an optional field needs an explicit request field (for example `clubChoice: "automatic"`) or a `/v2` route
+(section 4.3).
+
+**Next: N4, the presentation foundation (server)** (section 9). Open a fresh session on `feature/swiftui` (after the N3
+PR merges) and say **"Continue the SwiftUI rebuild at N4 (docs/SWIFTUI_REBUILD.md)."** Branch `feature/swiftui-n4-presentation`
+from `feature/swiftui` and open its PR into `feature/swiftui`.
 
 Read first: AGENTS.md, this document, D-001, D-008, D-018, D-020, D-043, D-046, D-049, D-052 (with its
 amendments), D-054 and D-055 to D-060.

@@ -6,7 +6,8 @@
  * - everything under `/api/v2/`, which is the Mac app's own API (the drift test fails on a `/v2` route missing here);
  * - reused routes the React app already serves and the Mac app needs, listed one by one as the milestone that first
  *   needs each is built. At N2 that is the app skeleton's (N3): the server's status and import, finding and choosing
- *   the save, data status, settings and key status, and the club list. The staff room's chat stream and the jobs
+ *   the save, data status, settings and key status, and the club list; N3 added saving the settings (the club the
+ *   Setup window picks, the appearance). The staff room's chat stream and the jobs
  *   endpoints join at N13, trade analysis at N12. The rest of the legacy routes are not described.
  *
  * Types are named, never written inline: each `request`, `response` and `errors` entry names a type exported from
@@ -68,9 +69,9 @@ export const operations: Operation[] = [
     operationId: 'startImport',
     method: 'post',
     path: '/api/import',
-    summary: 'Import the configured save\'s export again; progress arrives on the event stream.',
+    summary: 'Import the configured save\'s export again; progress arrives on the event stream. Refused (409) while an import runs.',
     response: 'ImportAccepted',
-    errors: { 400: 'ApiError' },
+    errors: { 400: 'ApiError', 409: 'ApiError' },
     reused: true,
   },
 
@@ -105,10 +106,10 @@ export const operations: Operation[] = [
     operationId: 'setSave',
     method: 'post',
     path: '/api/config',
-    summary: 'Use this save\'s export folder, and import it.',
+    summary: 'Use this save\'s export folder, and import it. Refused (409) while an import runs.',
     request: 'ConfigRequest',
     response: 'Ok',
-    errors: { 400: 'ApiError' },
+    errors: { 400: 'ApiError', 409: 'ApiError' },
     reused: true,
   },
 
@@ -135,8 +136,17 @@ export const operations: Operation[] = [
     operationId: 'getSettings',
     method: 'get',
     path: '/api/settings',
-    summary: 'The preferences, the active provider\'s key state and the data folder.',
+    summary: 'The preferences, the active provider\'s key state, the data folder and the current club.',
     response: 'SettingsResponse',
+    reused: true,
+  },
+  {
+    operationId: 'saveSettings',
+    method: 'post',
+    path: '/api/settings',
+    summary: 'Change preferences (the club, the appearance, ...); a field left out keeps its value.',
+    request: 'SettingsUpdate',
+    response: 'SettingsSaved',
     reused: true,
   },
   {

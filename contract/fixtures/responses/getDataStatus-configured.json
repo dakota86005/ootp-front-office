@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2040-07-01T12:00:00.000Z",
+  "configured": true,
+  "save": {
+    "found": true,
+    "name": "Test League",
+    "lgPath": "/tmp/pennant-contract-home/Library/Application Support/Out of the Park Developments/OOTP Baseball 27/saved_games/Test League.lg",
+    "discovery": "csv_layout",
+    "discoveryNotes": [],
+    "simulatedThrough": null,
+    "dateSource": null
+  },
+  "csv": {
+    "currentDate": "2040-05-06",
+    "simulatedThrough": "2040-05-05",
+    "exportedAt": "2040-07-01T12:00:00.000Z",
+    "importedAt": null
+  },
+  "transactionLog": {
+    "found": false,
+    "readable": false,
+    "error": {
+      "code": "missing",
+      "message": "No /tmp/pennant-contract-home/Library/Application Support/Out of the Park Developments/OOTP Baseball 27/saved_games/Test League.lg/temp/text_data.sqlite3 in the save's temp folder."
+    },
+    "unavailableReason": "database_missing",
+    "files": {
+      "db": false,
+      "wal": false,
+      "shm": false
+    },
+    "snapshot": null,
+    "coverage": null,
+    "counts": null,
+    "unsupportedSamples": []
+  },
+  "freshness": {
+    "level": "partial",
+    "save": {
+      "simulatedThrough": null
+    },
+    "csv": {
+      "state": "unverified",
+      "through": "2040-05-05",
+      "currentDate": "2040-05-06",
+      "lagDays": 0
+    },
+    "log": {
+      "state": "unavailable",
+      "through": null,
+      "lagDays": 0,
+      "unavailableReason": "database_missing"
+    },
+    "headline": "Partial — transaction log unavailable",
+    "reasons": [
+      "The save has no live transaction database. Current league state is available, but reasoning that depends on transaction history is limited."
+    ],
+    "action": null
+  }
+}

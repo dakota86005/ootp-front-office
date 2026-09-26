@@ -24,7 +24,7 @@
     "/api/config": {
       "post": {
         "operationId": "setSave",
-        "summary": "Use this save's export folder, and import it.",
+        "summary": "Use this save's export folder, and import it. Refused (409) while an import runs.",
         "tags": [
           "reused"
         ],
@@ -51,6 +51,16 @@
           },
           "400": {
             "description": "The request could not be done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409",
             "content": {
               "application/json": {
                 "schema": {
@@ -86,7 +96,7 @@
     "/api/import": {
       "post": {
         "operationId": "startImport",
-        "summary": "Import the configured save's export again; progress arrives on the event stream.",
+        "summary": "Import the configured save's export again; progress arrives on the event stream. Refused (409) while an import runs.",
         "tags": [
           "reused"
         ],
@@ -103,6 +113,16 @@
           },
           "400": {
             "description": "The request could not be done",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "HTTP 409",
             "content": {
               "application/json": {
                 "schema": {
@@ -262,7 +282,7 @@
     "/api/settings": {
       "get": {
         "operationId": "getSettings",
-        "summary": "The preferences, the active provider's key state and the data folder.",
+        "summary": "The preferences, the active provider's key state, the data folder and the current club.",
         "tags": [
           "reused"
         ],
@@ -273,6 +293,35 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "saveSettings",
+        "summary": "Change preferences (the club, the appearance, ...); a field left out keeps its value.",
+        "tags": [
+          "reused"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsSaved"
                 }
               }
             }
@@ -462,6 +511,33 @@
           "csvDir"
         ],
         "description": "The save to use (`POST /api/config`): its CSV export folder and its name."
+      },
+      "CurrentOrganization": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "configured",
+                  "human"
+                ]
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "source"
+        ],
+        "description": "The club the app is about when nothing names one: the configured organization, else the one the save's human manages; null when neither is known. A configured id is taken as configured even when the club list no longer has it (the server's rule for every view), so a client shows that club as not found rather than quietly switching clubs."
       },
       "DataStatus": {
         "type": "object",
@@ -2028,6 +2104,10 @@
           },
           "dataDir": {
             "type": "string"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/CurrentOrganization",
+            "description": "The club the app is about: the configured organization, else the human-managed one (`viewingOrganization.ts`)."
           }
         },
         "required": [
@@ -2036,6 +2116,113 @@
           "dataDir"
         ],
         "description": "What `GET /api/settings` serves."
+      },
+      "SettingsSaved": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Settings"
+          }
+        },
+        "required": [
+          "ok",
+          "settings"
+        ],
+        "description": "What `POST /api/settings` answers: the preferences as saved."
+      },
+      "SettingsUpdate": {
+        "type": "object",
+        "properties": {
+          "autoImport": {
+            "type": "boolean"
+          },
+          "useTeamColors": {
+            "type": "boolean"
+          },
+          "roundRatingsToFive": {
+            "type": "boolean",
+            "description": "Write overall and potential in fives, the way scouts talk. Display only — sorting and every calculation keep the exact grade."
+          },
+          "showUnavailablePitchers": {
+            "type": "boolean",
+            "description": "Keep pitchers on the injured list in the bullpen table.\n\nOff unless asked for. That page answers one question — who can throw tonight — and a man six weeks from a rehab start is not an answer to it. Nothing vanishes quietly: the heading says how many are being held back and hands them over in a click."
+          },
+          "autoGenerateAfterImport": {
+            "type": "boolean",
+            "description": "Write the storylines and the briefing by themselves after each import.\n\nOff unless asked for. Both cost money on someone else's API key, and a setting that quietly spends it would be a poor default however convenient."
+          },
+          "defaultOrgId": {
+            "$ref": "#/components/schemas/Integer"
+          },
+          "theme": {
+            "description": "'system' follows the OS setting and changes with it.",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "system",
+                  "dark",
+                  "light"
+                ]
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderId",
+            "description": "Which service the AI features talk to. Anthropic unless changed — it is what the app was built against and the only one the chat's tool loop and prompt caching are native to."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model id used by every AI feature. See models.ts for the picker's list."
+          },
+          "models": {
+            "type": "object",
+            "properties": {
+              "anthropic": {
+                "type": "string"
+              },
+              "openai": {
+                "type": "string"
+              },
+              "gemini": {
+                "type": "string"
+              },
+              "opencode": {
+                "type": "string"
+              },
+              "ollama": {
+                "type": "string"
+              }
+            },
+            "description": "The model chosen for each provider, remembered separately. Switching provider would otherwise leave a model id the new one has never heard of."
+          },
+          "aiFeatures": {
+            "type": "object",
+            "properties": {
+              "briefing": {
+                "$ref": "#/components/schemas/AiFeatureSettings"
+              },
+              "trade": {
+                "$ref": "#/components/schemas/AiFeatureSettings"
+              },
+              "storylines": {
+                "$ref": "#/components/schemas/AiFeatureSettings"
+              },
+              "chat": {
+                "$ref": "#/components/schemas/AiFeatureSettings"
+              }
+            },
+            "description": "Optional provider/model overrides for individual AI workloads.\n\nMissing entries inherit the global provider and that provider's selected model, preserving the behaviour of existing settings files."
+          }
+        },
+        "description": "What `POST /api/settings` takes: the preferences to change. A field left out keeps its value, and a value the handler cannot use is ignored. (Philosophy and next season's budget have routes of their own.)"
       },
       "SnapshotMeta": {
         "type": "object",

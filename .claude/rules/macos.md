@@ -7,6 +7,7 @@ paths:
   - "server/serverEvents.ts"
   - "scripts/build-sidecar.mjs"
   - "scripts/fetch-node-runtime.mjs"
+  - "scripts/synthetic-league.ts"
   - "scripts/contract-build.ts"
   - "scripts/lib/contractSpec.ts"
   - "macos/**"
@@ -16,6 +17,8 @@ paths:
   - "tests/contract.test.ts"
   - "tests/apiRoutes.ts"
   - "tests/contractShapes/**"
+  - "tests/sortCases.test.ts"
+  - "tests/stringCatalog.test.ts"
 ---
 
 # Pennant for Mac (the SwiftUI rebuild): working reminder
@@ -52,5 +55,18 @@ and those documents differ, they win. The presentation cases are in `docs/BEHAVI
   PennantAPI reads the spec through a link, never a copy; `swift build && swift test` in `macos/Packages/PennantAPI`.
   Ids and counts are `Integer`; export a concrete alias of a generic, never the generic; read events through
   `ServerEventReading` (a known type that did not decode is `malformed`, never ignored).
+- **The app skeleton (N3):** `ServerController`, `AppModel`, the event client, routes, the comparator and backups live in
+  PennantKit; the server reaches the bundle through `npm run mac:stage` and the "Embed the server" build phase (the
+  repository's `node_modules` is never rebuilt for it). Run a Debug build or a test only on a scratch data folder
+  (`PENNANT_DEV_DATA_DIR`, `npm run synthetic:league`), never the real one or `data/`; a Debug build given no folder
+  starts no server. Every launch is gated on the first-run backup inside `ServerController`. The current club is
+  served (`organization` on `/api/settings`); Swift never resolves it. The departments and their views live in
+  PennantFeatures (one target per department, each a `DepartmentModule`); the app target assembles the registry, and a
+  new view is a new `DepartmentViewDescriptor`. Every structural label goes in the app's String Catalog
+  (`macos/Pennant/Localizable.xcstrings`; `tests/stringCatalog.test.ts` checks the Swift sources against it). Snapshots
+  of the shell land in `build/macos-snapshots/`. SWIFTUI_REBUILD.md sections 3.1, 3.2, 3.6, 5.2, 5.3, 6 and 7.5, "As
+  built at N3", have the details.
+- **Quit only through `QuitCoordinator.requestQuit()`**, never `NSApp.terminate` from a `Task` or main-queue block (the
+  `.terminateLater` wait cannot drain the main queue); `applicationShouldTerminate` answers through `shouldTerminate`.
 - Verify with `macos/scripts/test.sh` plus the server baseline; visual checks come from XCUITest and
-  `ImageRenderer` PNGs, not from asking the owner to look.
+  snapshot PNGs (`build/macos-snapshots/`), not from asking the owner to look.

@@ -14,6 +14,12 @@ build/calibration-refit-worker.cjs.map
 # The Mac app's server bundle and its pinned Node runtime (npm run build:sidecar, npm run sidecar:node)
 build/sidecar/
 build/node-runtime/
+# The server staged for the Mac app bundle, its production install, the Mac test results and snapshots (macos/)
+build/macos-server/
+build/macos-server-install/
+build/macos-test/
+build/macos-snapshots/
+build/macos-ci/
 release/
 
 # Local data — imported league database, rating history, AI caches
@@ -58,6 +64,7 @@ chat-*.json
 # Swift packages' build output and Xcode's per-user state (macos/)
 .build/
 xcuserdata/
+*.profraw
 
 # OS
 .DS_Store

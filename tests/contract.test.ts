@@ -9,7 +9,8 @@ import addFormats from 'ajv-formats';
 import { Router } from 'express';
 import { SHAPES_SPEC_PATH, SPEC_PATH, buildShapesSpec, buildSpec, serializeSpec, transform } from '../scripts/lib/contractSpec.js';
 import { operations } from '../server/contract/routes.js';
-import { api, runImport } from '../server/api.js';
+import { api, importState, runImport } from '../server/api.js';
+import { loadConfig, saveConfig } from '../server/config.js';
 import { startJob } from '../server/jobs.js';
 import { registeredRoutes, type RegisteredRoute } from './apiRoutes';
 import { BANNED_JARGON, BANNED_VERDICTS, bannedIn, bannedInPayload, shownStrings } from './bannedJargon';
@@ -300,6 +301,7 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
   /**
    * The POSTs, in the answers that are safe to cause here (the synthetic data folder is a temporary one). Setting a
    * save and starting an import (their 200s) would start an import; their 400s are checked, their 200s are not.
+   * Saving the settings writes the temporary folder's settings file, and is put back.
    */
   const POSTS: Record<string, Array<{ body: unknown; status: number; name: string }>> = {
     resolveFolder: [
@@ -312,6 +314,11 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
       { name: 'not-a-save', body: { lgPath: '/nowhere/Not A Save.lg' }, status: 400 },
     ],
     setSave: [{ name: 'no-folder', body: {}, status: 400 }],
+    // The Setup window saves the club it picked; the second case puts the preferences back for the tests after it
+    saveSettings: [
+      { name: 'club', body: { defaultOrgId: 2, theme: 'dark' }, status: 200 },
+      { name: 'restored', body: { defaultOrgId: null, theme: 'system' }, status: 200 },
+    ],
     startImport: [{ name: 'no-save', body: undefined, status: 400 }],
   };
 
@@ -334,6 +341,59 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
         expect(validate(answer) ? [] : validate.errors, `${op.operationId} ${c.name} against ${type}`).toEqual([]);
         fixture(`responses/${op.operationId}-${c.name}.json`, json(answer));
       }
+    }
+  }, SLOW);
+
+  /** The pretend save's export folder (in `home`). */
+  const pretendExport = () => path.join(home, 'Library/Application Support/Out of the Park Developments/OOTP Baseball 27/saved_games/Test League.lg/import_export/csv');
+
+  it('refuses a second import with a 409 in the contract\'s shape while one runs', async () => {
+    const previous = loadConfig();
+    saveConfig({ csvDir: pretendExport(), saveName: 'Test League' });
+    importState.importing = true;
+    try {
+      const cases: Array<[string, string, unknown]> = [
+        ['setSave', '/api/config', { csvDir: pretendExport(), saveName: 'Test League' }],
+        ['startImport', '/api/import', undefined],
+      ];
+      for (const [operationId, route, body] of cases) {
+        const op = operations.find((o) => o.operationId === operationId)!;
+        expect(op.errors?.[409], `${operationId} documents 409`).toBe('ApiError');
+        const res = await fetch(`${base}${route}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        expect(res.status, operationId).toBe(409);
+        const answer = await res.json();
+        const validate = validator('ApiError');
+        expect(validate(answer) ? [] : validate.errors).toEqual([]);
+        fixture(`responses/${operationId}-import-running.json`, json(answer));
+      }
+    } finally {
+      importState.importing = false;
+      saveConfig(previous);
+    }
+  }, SLOW);
+
+  it('serves the status and the data status of a chosen save in the contract\'s shape', async () => {
+    // Chosen without importing (the import's answers are checked above), so the previews show a consistent pair
+    const previous = loadConfig();
+    saveConfig({ csvDir: pretendExport(), saveName: 'Test League' });
+    try {
+      for (const [operationId, route, type] of [['getStatus', '/api/status', 'ServerStatus'], ['getDataStatus', '/api/data-status', 'DataStatus']]) {
+        const res = await fetch(`${base}${route}`);
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.configured, operationId).toBe(true);
+        const validate = validator(type);
+        expect(validate(body) ? [] : validate.errors, operationId).toEqual([]);
+        // The logo cache's token changes with the export folder's time; the fixture keeps a fixed one
+        if (typeof body.logoToken === 'string' && body.logoToken !== 'none') body.logoToken = 'token';
+        fixture(`responses/${operationId}-configured.json`, json(body));
+      }
+    } finally {
+      saveConfig(previous);
     }
   }, SLOW);
 
