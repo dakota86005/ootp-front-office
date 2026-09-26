@@ -46,7 +46,9 @@ public final class AppModel {
         public var at: Date
     }
 
-    private let controller: ServerController
+    private nonisolated let controller: ServerController
+    /// The server's controller, for the quit path (`QuitCoordinator` stops it off the main actor).
+    public nonisolated var serverController: ServerController { controller }
     private let makeClient: @Sendable (ServerConnection) -> Client
     private var stateTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
@@ -124,11 +126,17 @@ public final class AppModel {
         await controller.tryAgain()
     }
 
-    /// Stops the server cleanly (the app's quit waits for this). Nothing starts a server afterwards.
-    public func shutdown() async {
+    /// The quit has begun: nothing starts a server from now on, and the event stream closes.
+    public func beginShutdown() {
         shuttingDown = true
         eventTask?.cancel()
         eventTask = nil
+    }
+
+    /// Stops the server cleanly. Nothing starts a server afterwards. (The app's quit goes through `QuitCoordinator`,
+    /// which does not depend on the main queue.)
+    public func shutdown() async {
+        beginShutdown()
         await controller.stop()
         apply(await controller.state)
     }

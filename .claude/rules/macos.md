@@ -60,5 +60,7 @@ and those documents differ, they win. The presentation cases are in `docs/BEHAVI
   repository's `node_modules` is never rebuilt for it). Run a Debug build or a test only on a scratch data folder
   (`PENNANT_DEV_DATA_DIR`, `npm run synthetic:league`), never the real one or `data/`. SWIFTUI_REBUILD.md sections 5.2,
   5.3 and 6, "As built at N3", have the details.
+- **Quit only through `QuitCoordinator.requestQuit()`**, never `NSApp.terminate` from a `Task` or main-queue block (the
+  `.terminateLater` wait cannot drain the main queue); `applicationShouldTerminate` answers through `shouldTerminate`.
 - Verify with `macos/scripts/test.sh` plus the server baseline; visual checks come from XCUITest and
   `ImageRenderer` PNGs, not from asking the owner to look.
