@@ -58,17 +58,22 @@ public struct SidebarView: View {
 }
 
 /// The club card for the served current club: its served name and colours (unless the GM turned team colours off, the
-/// served `useTeamColors`), and which club it is. A configured club
-/// the club list does not have is named as not found; with no club served there is no card.
+/// served `useTeamColors`), its record and logo from the catalog, and which club it is. A configured club the club
+/// list does not have is named as not found; with no club served there is no card.
 struct SidebarClubCard: View {
     @Environment(AppModel.self) private var model
+    @State private var logo: Image?
 
     var body: some View {
         if let club = model.club {
             if let org = club.org {
+                let served = model.catalogClub
                 ClubCard(
                     name: org.label,
                     detail: club.source.label,
+                    record: served?.record.display,
+                    recordHint: served?.record.hint,
+                    logo: logo,
                     tint: ClubTint(
                         background: org.colors.bg,
                         foreground: org.colors.fg,
@@ -76,6 +81,7 @@ struct SidebarClubCard: View {
                         useTeamColors: model.settings?.settings.useTeamColors ?? true
                     )
                 )
+                .task(id: served?.logo) { await loadLogo(served?.logo) }
             } else {
                 Label("Club not in this save", systemImage: "questionmark.circle")
                     .font(.callout)
@@ -84,6 +90,17 @@ struct SidebarClubCard: View {
                     .accessibilityIdentifier("club.card")
             }
         }
+    }
+}
+
+extension SidebarClubCard {
+    /// The club's logo from the path the catalog serves (the save's own art); none when the save holds none.
+    private func loadLogo(_ path: String?) async {
+        guard let path, let data = await model.servedFile(path), let image = NSImage(data: data) else {
+            logo = nil
+            return
+        }
+        logo = Image(nsImage: image)
     }
 }
 

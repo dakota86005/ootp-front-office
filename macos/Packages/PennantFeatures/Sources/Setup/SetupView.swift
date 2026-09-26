@@ -234,14 +234,9 @@ private struct ImportStep: View {
                 }
                 if let problem = model.importProblem {
                     switch problem {
-                    case .served(let text): ProblemLine(Text(verbatim: text))
+                    case .served(let text, let detail): ProblemLine(served: text, detail: detail)
                     case .request(let request): ProblemLine(request)
-                    case .didNotStart: ProblemLine(Text("The import did not start"))
-                    case .didNotFinish(let since):
-                        ProblemLine(Text("The import did not finish"))
-                        if let started = ServedText.timestamp(since) {
-                            LabeledContent("Started") { Text(verbatim: started) }
-                        }
+                    case .unexplained: ProblemLine(Text("The import did not finish"))
                     }
                     HStack {
                         Button("Choose Another Save") { model.restart() }
@@ -329,7 +324,10 @@ private struct PickClubStep: View {
 
 #Preview("Setup: importing") {
     SetupView(
-        model: .preview(step: .importing, progress: .init(table: "players", fileIndex: 12, files: 71, rows: 50_000, phase: .init(value1: .writing))),
+        model: .preview(step: .importing, progress: .init(
+            table: "players", fileIndex: 12, files: 71, rows: 50_000, phase: .init(value1: .writing),
+            words: .init(phase: "Writing the league", table: "Players", display: "Writing players · 12 of 71")
+        )),
         status: nil
     )
     .frame(width: SetupView.size.width, height: SetupView.size.height)

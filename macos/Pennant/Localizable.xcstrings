@@ -31,6 +31,12 @@
     "Assignments": {
       "extractionState": "manual"
     },
+    "Automatic": {
+      "extractionState": "manual"
+    },
+    "Automatic follows the club you manage in the save.": {
+      "extractionState": "manual"
+    },
     "Back": {
       "extractionState": "manual"
     },
@@ -105,9 +111,6 @@
     "Export folder": {
       "extractionState": "manual"
     },
-    "Exported": {
-      "extractionState": "manual"
-    },
     "Farm & Development": {
       "extractionState": "manual"
     },
@@ -135,19 +138,10 @@
     "Free Agents": {
       "extractionState": "manual"
     },
-    "From the Keychain": {
-      "extractionState": "manual"
-    },
-    "From the environment": {
-      "extractionState": "manual"
-    },
     "Front Office": {
       "extractionState": "manual"
     },
     "GM Briefing": {
-      "extractionState": "manual"
-    },
-    "Game date": {
       "extractionState": "manual"
     },
     "General": {
@@ -167,12 +161,6 @@
       "extractionState": "manual"
     },
     "Import Now": {
-      "extractionState": "manual"
-    },
-    "Imported": {
-      "extractionState": "manual"
-    },
-    "Imported data through": {
       "extractionState": "manual"
     },
     "Importing the export": {
@@ -328,12 +316,6 @@
     "Save folder": {
       "extractionState": "manual"
     },
-    "Save through": {
-      "extractionState": "manual"
-    },
-    "Saved in the data folder": {
-      "extractionState": "manual"
-    },
     "Saves Pennant found": {
       "extractionState": "manual"
     },
@@ -369,9 +351,6 @@
     "Standings": {
       "extractionState": "manual"
     },
-    "Started": {
-      "extractionState": "manual"
-    },
     "Starting…": {},
     "Stopping…": {},
     "Storylines": {
@@ -389,9 +368,6 @@
     "The data folder could not be backed up": {},
     "The data folder is in use": {},
     "The import did not finish": {
-      "extractionState": "manual"
-    },
-    "The import did not start": {
       "extractionState": "manual"
     },
     "The request failed": {

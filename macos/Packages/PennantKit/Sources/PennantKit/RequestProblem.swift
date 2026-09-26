@@ -36,4 +36,18 @@ public enum RequestProblem: Error, Hashable, Sendable {
     public static func undocumented(_ code: Int, operation: String) -> RequestProblem {
         .failed(detail: "\(operation): undocumented HTTP \(code)")
     }
+
+    /// An answer with a status code the contract does not document, read for the server's sentence: a route that fails
+    /// answers `{ "error": sentence }` (a `/v2` route adds the raw `detail`), so the window can say what the server said.
+    public static func undocumented(_ code: Int, body: HTTPBody?, operation: String) async -> RequestProblem {
+        if let body, let data = try? await Data(collecting: body, upTo: 64 * 1024),
+           let answer = try? JSONDecoder().decode(ServedError.self, from: data), !answer.error.isEmpty {
+            return .served(answer.error)
+        }
+        return undocumented(code, operation: operation)
+    }
+
+    private struct ServedError: Decodable {
+        let error: String
+    }
 }

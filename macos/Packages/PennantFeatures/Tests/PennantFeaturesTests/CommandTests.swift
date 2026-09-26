@@ -71,11 +71,11 @@ struct CommandAvailabilityTests {
 
 @Suite("The toolbar's subtitle")
 struct SubtitleTests {
-    @Test("joins the served game date and the data status's own headline")
+    @Test("is the server's own subtitle: the game date in words and the headline, never a date parsed here")
     func served() throws {
-        let data = try Data(contentsOf: PreviewFixtures.responses.appending(path: "getDataStatus.json"))
-        let status = try JSONDecoder().decode(Components.Schemas.DataStatus.self, from: data)
-        #expect(ServedText.subtitle(dataStatus: status, status: nil) == "2040-05-06 · Partial — transaction log unavailable")
+        let data = try Data(contentsOf: PreviewFixtures.responses.appending(path: "getDataStatusWords.json"))
+        let status = try JSONDecoder().decode(Components.Schemas.DataStatusView.self, from: data)
+        #expect(ServedText.subtitle(dataStatus: status, status: nil) == "May 6, 2040 · Transaction history unavailable")
     }
 
     @Test("without a data status, the last import's time; without either, nothing")
