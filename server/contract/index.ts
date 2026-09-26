@@ -62,3 +62,8 @@ import type { Org } from '../org.js';
 export type { Org } from '../org.js';
 /** The major-league clubs (`GET /api/orgs`). */
 export type OrgList = Org[];
+
+// Presentation: every sentence the Mac app shows (section 4.1). `Row` is generic; a payload exports a concrete alias.
+export type {
+  DeptId, Certainty, Tone, Unit, ServedValue, Place, BasisLine, BasisSource, Lean, Basis, TargetKind, Target, Claim, Cell,
+} from './presentation.js';

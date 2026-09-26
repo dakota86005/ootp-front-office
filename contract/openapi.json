@@ -494,6 +494,179 @@
           "upstreamUrl"
         ]
       },
+      "Basis": {
+        "type": "object",
+        "properties": {
+          "because": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BasisLine"
+            }
+          },
+          "source": {
+            "$ref": "#/components/schemas/BasisSource"
+          },
+          "unknown": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What is not known, as sentences. An empty list means nothing is missing, never \"not checked\"."
+          },
+          "wouldChange": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What would change the reading, as sentences."
+          },
+          "lean": {
+            "$ref": "#/components/schemas/Lean"
+          },
+          "certainty": {
+            "$ref": "#/components/schemas/Certainty"
+          },
+          "stamp": {
+            "type": "string",
+            "description": "The D-041 stamp shown in the evidence view (a breakdown, where a method word may help)."
+          }
+        },
+        "required": [
+          "because",
+          "source",
+          "unknown",
+          "wouldChange",
+          "certainty"
+        ],
+        "description": "Why a claim says what it says (D-018, D-023, D-031, D-044: show the basis)."
+      },
+      "BasisLine": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "description": "One line of a claim's evidence: what was read and what it said."
+      },
+      "BasisSource": {
+        "type": "object",
+        "properties": {
+          "department": {
+            "$ref": "#/components/schemas/DeptId"
+          },
+          "specialist": {
+            "type": "string",
+            "description": "The specialist, in words (\"Data status\", \"Player Value\")."
+          },
+          "asOf": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the evidence was read (an import's time, ISO 8601), or null when it has not been."
+          },
+          "gameDate": {
+            "$ref": "#/components/schemas/GameDate",
+            "description": "The game date the evidence reflects, as the export wrote it, or null."
+          },
+          "sample": {
+            "type": "string",
+            "description": "How much evidence there is, in words (\"30 games\"), when that matters."
+          }
+        },
+        "required": [
+          "department",
+          "specialist",
+          "asOf"
+        ],
+        "description": "Who answered: the department and its specialist, and how current the evidence is."
+      },
+      "Cell": {
+        "type": "object",
+        "properties": {
+          "display": {
+            "type": "string"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/Tone"
+          },
+          "hint": {
+            "type": "string"
+          },
+          "claimRef": {
+            "type": "string",
+            "description": "A claim elsewhere in the payload that explains this cell."
+          }
+        },
+        "required": [
+          "display"
+        ],
+        "description": "One cell of a served table: what it shows, and its tone and help tag when it has them."
+      },
+      "Certainty": {
+        "description": "How a claim's number or line is called (D-041): `calibrated` (fitted on the save's own history), `provisional` (a model parameter that ought to be fitted and has not been), `policy` (a line chosen and stated, never fitted), `unknown` (the basis cannot say), and `fact`: an objective fact read from the export or the save (a record, a date, how many days one source is behind another), which no fitted number and no chosen line decided. Section 4.1 listed the first four; `fact` was added at N4 so a plain fact is never stamped as policy.",
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "fact",
+              "calibrated",
+              "provisional",
+              "policy",
+              "unknown"
+            ]
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "Claim": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The visible line."
+          },
+          "hint": {
+            "type": "string",
+            "description": "The help tag: one line, at most about 75 characters."
+          },
+          "value": {
+            "$ref": "#/components/schemas/ServedValue"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/Tone"
+          },
+          "place": {
+            "$ref": "#/components/schemas/Place"
+          },
+          "basis": {
+            "$ref": "#/components/schemas/Basis"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Target"
+            }
+          }
+        },
+        "required": [
+          "text",
+          "tone",
+          "basis",
+          "links"
+        ],
+        "description": "One visible line, in the GM's voice, with its basis."
+      },
       "ConfigRequest": {
         "type": "object",
         "properties": {
@@ -639,6 +812,28 @@
           "csv",
           "transactionLog",
           "freshness"
+        ]
+      },
+      "DeptId": {
+        "description": "A department of the club, as the Mac app's sidebar has them (SWIFTUI_REBUILD.md section 3.5). An open enum in the spec: a newer server may name a department an older app does not know.",
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "frontOffice",
+              "majorLeague",
+              "farm",
+              "scouting",
+              "trades",
+              "finance",
+              "medical",
+              "league",
+              "philosophy"
+            ]
+          },
+          {
+            "type": "string"
+          }
         ]
       },
       "ExportPendingEvent": {
@@ -1057,6 +1252,25 @@
           "hint",
           "encrypted"
         ]
+      },
+      "Lean": {
+        "type": "object",
+        "properties": {
+          "neutral": {
+            "type": "string"
+          },
+          "why": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "neutral",
+          "why"
+        ],
+        "description": "The organization's philosophy leaning on a reading (D-052's lens): the neutral reading beside the reasons for the lean. A claim with no lean says so with `null`; an absent lean is never read as \"neutral\"."
       },
       "LiveLogFailure": {
         "anyOf": [
@@ -1558,6 +1772,29 @@
           "versatility"
         ]
       },
+      "Place": {
+        "type": "object",
+        "properties": {
+          "rank": {
+            "$ref": "#/components/schemas/Integer"
+          },
+          "of": {
+            "$ref": "#/components/schemas/Integer"
+          },
+          "tiedWith": {
+            "$ref": "#/components/schemas/Integer"
+          },
+          "overlap": {
+            "$ref": "#/components/schemas/Integer"
+          }
+        },
+        "required": [
+          "rank",
+          "of",
+          "tiedWith"
+        ],
+        "description": "A league place, stated (D-057): `rank` among `of` clubs that have the figure, `tiedWith` the number of other clubs on the same figure, and, for a Player Value place, `overlap`: how many clubs' ranges overlap this one."
+      },
       "ProviderChoice": {
         "type": "object",
         "properties": {
@@ -1858,6 +2095,37 @@
           "locations"
         ],
         "description": "Where `GET /api/search-locations` looked for saves, so the user can see why auto-detection came up empty."
+      },
+      "ServedValue": {
+        "type": "object",
+        "properties": {
+          "n": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "unit": {
+            "$ref": "#/components/schemas/Unit"
+          },
+          "low": {
+            "type": "number",
+            "description": "The low end of the range, when the value is a range (the most likely value is `n`)."
+          },
+          "high": {
+            "type": "number"
+          },
+          "display": {
+            "type": "string",
+            "description": "The value as the app shows it (\"4.8 runs a game\", \"Not known yet\")."
+          }
+        },
+        "required": [
+          "n",
+          "unit",
+          "display"
+        ],
+        "description": "A number a claim shows, with its range when it has one. `n` null is a value the evidence cannot give; `display` always says something (the sentence for a missing value, never a zero or a dash)."
       },
       "ServerEvent": {
         "anyOf": [
@@ -2288,6 +2556,94 @@
               "behind",
               "unverified",
               "unavailable"
+            ]
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "Target": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/TargetKind"
+          },
+          "department": {
+            "$ref": "#/components/schemas/DeptId"
+          },
+          "view": {
+            "type": "string",
+            "description": "A view's id inside its department (`fortyManOptions`)."
+          },
+          "playerId": {
+            "$ref": "#/components/schemas/Integer"
+          },
+          "teamId": {
+            "$ref": "#/components/schemas/Integer"
+          },
+          "key": {
+            "type": "string",
+            "description": "A decision's key inside its department."
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "description": "Where a claim or a row leads: a department, one of its views, a player, a club or a decision. Flat, with the fields its kind needs, so the app reads one shape."
+      },
+      "TargetKind": {
+        "description": "What a target opens.",
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "department",
+              "view",
+              "player",
+              "club",
+              "decision"
+            ]
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "Tone": {
+        "description": "How a line reads at a glance. Colour is never the only signal: the app pairs a tone with a symbol and a word.",
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "good",
+              "bad",
+              "caution",
+              "neutral",
+              "unknown"
+            ]
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "Unit": {
+        "description": "What a served number counts, so the app formats it (a share as a percentage, dollars as money).",
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "count",
+              "share",
+              "rate",
+              "dollars",
+              "wins",
+              "runs",
+              "games",
+              "days",
+              "years",
+              "place"
             ]
           },
           {
