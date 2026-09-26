@@ -9,6 +9,8 @@ import addFormats from 'ajv-formats';
 import { Router } from 'express';
 import { SHAPES_SPEC_PATH, SPEC_PATH, buildShapesSpec, buildSpec, serializeSpec, transform } from '../scripts/lib/contractSpec.js';
 import { operations } from '../server/contract/routes.js';
+import { basisProblems } from '../server/presentation/claim.js';
+import type { Basis } from '../server/contract/presentation.js';
 import { api, importState, runImport } from '../server/api.js';
 import { loadConfig, saveConfig } from '../server/config.js';
 import { startJob } from '../server/jobs.js';
@@ -179,6 +181,21 @@ describe('the builder refuses what the Swift client could not read', () => {
   }, SLOW);
 });
 
+/** Every `basis` in a served payload that breaks the builder's rules, with where it sits. */
+function servedBasisProblems(payload: unknown): string[] {
+  const found: string[] = [];
+  const walk = (node: unknown, at: string): void => {
+    if (Array.isArray(node)) return node.forEach((n, i) => walk(n, `${at}[${i}]`));
+    if (!node || typeof node !== 'object') return;
+    for (const [k, v] of Object.entries(node)) {
+      if (k === 'basis' && v && typeof v === 'object') for (const p of basisProblems(v as Basis)) found.push(`${at}.basis: ${p}`);
+      walk(v, `${at}.${k}`);
+    }
+  };
+  walk(payload, '$');
+  return found;
+}
+
 /** The strict form the server is held to: enums closed, no catch-all event, and no field the spec does not describe. */
 function strictValidator(): (type: string) => ValidateFunction {
   const spec = buildSpec({ open: false }) as Any;
@@ -301,6 +318,9 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
     if (op.path.startsWith('/api/v2/')) {
       const root = SURFACE_ROOTS[op.operationId] ?? op.operationId;
       expect(bannedInPayload(body, root)).toEqual([]);
+      // Every basis the app will read meets the builder's rules (an evidence line, no blank sentence, a stamp with its
+      // certainty), checked on the bytes that arrive
+      expect(servedBasisProblems(body)).toEqual([]);
       for (const e of exceptionsUsed(body, root)) exceptionsInUse.add(e);
     }
     // Where the server looked for saves depends on the platform, so it is no fixture

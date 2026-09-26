@@ -3,7 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { HINT_MAX, basis, cell, claim, row, servedValue, unknownValue, type BasisInput } from '../server/presentation/claim.js';
+import {
+  HINT_MAX, assertAuthored, basis, basisProblems, cell, claim, row, servedValue, target, unknownValue, type BasisInput, type BuiltBasis,
+} from '../server/presentation/claim.js';
+import type { Claim } from '../server/contract/presentation.js';
 
 /**
  * The presentation contract's authoring rules (BEHAVIOR_CASES.md "Pennant for Mac", `v2Contract.test.ts`; D-056, D-018):
@@ -95,5 +98,56 @@ describe('the shown strings are checked as they are built', () => {
     expect(built).toEqual({ id: 'r1', cells: { name: { display: 'Club 1' }, wins: { display: 'Not known', tone: 'unknown' } }, sort: { name: 'Club 1', wins: null } });
     expect(() => row('r2', { name: cell('Club 2') }, { name: 'Club 2', wins: 3 } as never)).toThrow(/every column/);
     expect(() => row('r3', { wins: cell('3') }, { wins: Number.NaN })).toThrow(/sorts as null/);
+  });
+});
+
+describe('the basis guarantee holds at run time too (review S3: the five ways around it)', () => {
+  it('(a) refuses a spread of a built basis, which kept the brand in the type but is a new object', () => {
+    const spread = { ...basis(plain), unknown: [''], because: [] } as unknown as BuiltBasis;
+    expect(() => claim({ text: 'Spread', tone: 'neutral', basis: spread })).toThrow(/must come from basis\(\)/);
+    // and a built basis cannot be changed in place: it is frozen
+    const built = basis(plain);
+    expect(() => { (built.unknown as string[]).push(''); }).toThrow();
+  });
+
+  it('(b) refuses a basis with no evidence line, unless its certainty is unknown', () => {
+    expect(() => basis({ ...plain, because: [] })).toThrow(/at least one evidence line/);
+    expect(basis({ ...plain, because: [], certainty: 'unknown' }).because).toEqual([]);
+  });
+
+  it('(c, d, e) refuses, before sending, a claim built by hand in a function, an array or a cast', () => {
+    const hand = (): Claim => ({ text: 'Hand-built', tone: 'neutral', basis: basis(plain), links: [] });
+    const list: Claim[] = [{ text: 'In a list', tone: 'neutral', basis: basis(plain), links: [] }];
+    const good = claim({ text: 'Made', tone: 'neutral', basis: basis(plain) });
+    const cast = { text: 'Cast', tone: 'neutral', basis: basis(plain), links: [] } as typeof good;
+    expect(() => assertAuthored({ headline: hand() })).toThrow(/claim\(\) did not make/);
+    expect(() => assertAuthored({ rows: [{ claim: list[0] }] })).toThrow(/claim\(\) did not make/);
+    expect(() => assertAuthored([cast])).toThrow(/claim\(\) did not make/);
+    expect(() => assertAuthored({ headline: good, rows: [{ id: 'r', cells: {}, sort: {}, claim: good }] })).not.toThrow();
+  });
+
+  it('refuses empty sentences in "not known" and "would change if"', () => {
+    expect(() => basis({ ...plain, unknown: [' '] })).toThrow(/unknown\[0\] is empty/);
+    expect(() => basis({ ...plain, wouldChange: [''] })).toThrow(/wouldChange\[0\] is empty/);
+  });
+
+  it('ties the stamp to the certainty: required for calibrated, provisional and policy, refused for a fact (D-041)', () => {
+    for (const certainty of ['calibrated', 'provisional', 'policy'] as const) {
+      expect(() => basis({ ...plain, certainty })).toThrow(/needs its stamp/);
+      expect(basis({ ...plain, certainty, stamp: 'Chosen: the top fifth of the league.' }).stamp).toBeDefined();
+    }
+    expect(() => basis({ ...plain, certainty: 'fact', stamp: 'A stamp' })).toThrow(/carries no stamp/);
+    expect(basisProblems(basis(plain))).toEqual([]);
+  });
+});
+
+describe('a target has the fields its kind needs', () => {
+  it('builds each kind, and refuses a player or club target without its id', () => {
+    expect(target({ kind: 'player', playerId: 7 })).toEqual({ kind: 'player', playerId: 7 });
+    expect(target({ kind: 'view', department: 'majorLeague', view: 'fortyManOptions' })).toEqual({ kind: 'view', department: 'majorLeague', view: 'fortyManOptions' });
+    expect(target({ kind: 'decision', department: 'farm', key: 'need-1' })).toMatchObject({ key: 'need-1' });
+    expect(() => target({ kind: 'player', playerId: 0 })).toThrow(/needs a player id/);
+    expect(() => target({ kind: 'club', teamId: undefined as never })).toThrow(/needs a team id/);
+    expect(() => target({ kind: 'view', department: 'farm', view: '' })).toThrow(/empty/);
   });
 });

@@ -56,6 +56,20 @@ function valueImports(file: string): string[] {
   return found;
 }
 
+/** The forms that make a claim or basis without the builder, or reshape a built one (review S3). */
+function handBuilt(source: string): string[] {
+  const forms: Array<[string, RegExp]> = [
+    ['a spread of a basis', /\.\.\.\s*(?:basis\(|[\w.]*[bB]asis\b)/],
+    ['a cast', /\bas\s+(?:typeof\b|Claim\b|Basis\b|BuiltBasis\b)/],
+    ['a value annotated as a claim or basis', /:\s*(?:readonly\s+)?(?:Claim|Basis|BuiltBasis)(?:\[\])*\s*=/],
+    ['an array annotated as claims or bases', /:\s*(?:Readonly)?(?:Array)<(?:Claim|Basis|BuiltBasis)>\s*=/],
+    ['a function returning a hand-made claim or basis', /\)\s*:\s*(?:Claim|Basis|BuiltBasis)(?:\[\])*\s*(?:\{|=>)/],
+    ['satisfies', /\bsatisfies\s+(?:Claim|Basis|BuiltBasis)\b/],
+    ['a generic cast', /<(?:Claim|Basis|BuiltBasis)>\s*[[{(]/],
+  ];
+  return forms.filter(([, re]) => re.test(source)).map(([name]) => name);
+}
+
 const moduleName = (specifier: string): string => path.basename(specifier).replace(/\.(js|ts)$/, '');
 
 const RATINGS = [/players_value/, /\boa_rating\b/, /\bpot_rating\b/, /\boverall_value\b/, /\btalent_value\b/, /\bvaluesByPlayer\b/,
@@ -84,12 +98,27 @@ describe('the presentation boundary', () => {
   });
 
   it.each(PRESENTATION.filter((f) => f !== 'presentation/claim.ts'))('%s builds claims only through claim() and basis()', (file) => {
-    const source = code(file);
-    expect(source).not.toMatch(/\bas\s+(Claim|Basis|BuiltBasis)\b/);
-    expect(source).not.toMatch(/:\s*(Claim|Basis|BuiltBasis)\s*=/);
-    expect(source).not.toMatch(/\bsatisfies\s+(Claim|Basis)\b/);
+    expect(handBuilt(code(file))).toEqual([]);
     // A file that states a certainty hands it to basis()
-    if (/\bcertainty\s*:/.test(source)) expect(source, `${file} states a certainty without basis()`).toMatch(/\bbasis\(/);
+    if (/\bcertainty\s*:/.test(code(file))) expect(code(file), `${file} states a certainty without basis()`).toMatch(/\bbasis\(/);
+  });
+
+  it('catches every hand-built form the review found (S3): a spread, a cast, an annotated value, an array, a return type', () => {
+    const forms = {
+      spread: `claim({ text: 'x', tone: 'neutral', basis: { ...basis(input), unknown: [''] } })`,
+      spreadVariable: `const b = { ...shared.basis, because: [] };`,
+      returnType: `function headline(): Claim { return { text: 'x', tone: 'neutral', basis: b, links: [] }; }`,
+      arrowReturn: `const f = (): Basis => ({ because: [] });`,
+      arrayAnnotation: `const d: Claim[] = [{ text: 'x' }];`,
+      genericArray: `const d: Array<Claim> = [];`,
+      castTypeof: `const c = raw as typeof ok;`,
+      castClaim: `const c = raw as Claim;`,
+      satisfies: `const c = { text: 'x' } satisfies Claim;`,
+      annotated: `const c: Claim = { text: 'x' };`,
+    };
+    for (const [name, snippet] of Object.entries(forms)) expect(handBuilt(snippet), name).not.toEqual([]);
+    // What authors do write passes
+    expect(handBuilt(`const headline = claim({ text: 'x', tone: 'good', basis: basis(input) });\nexport interface View { headline: Claim; rows: Claim[] }`)).toEqual([]);
   });
 
   it.each(BOTH)('%s writes nothing: no insert, update, delete or file write', (file) => {
@@ -97,8 +126,8 @@ describe('the presentation boundary', () => {
   });
 
   it('is imported only by the modules that serve it, never by a specialist', () => {
-    // The API and settings routes serve its words; the importer names its progress type
-    const allowed = new Set(['api.ts', 'v2Routes.ts', 'settings.ts', 'importer.ts', 'serverEvents.ts', 'playerStateRoutes.ts']);
+    // The API and the v2 routes serve its words; the event stream names its import note
+    const allowed = new Set(['api.ts', 'v2Routes.ts', 'serverEvents.ts']);
     const importers = filesUnder('')
       .filter((f) => !f.startsWith('presentation/') && !f.startsWith('contract/'))
       .filter((f) => /from\s+'\.\/presentation\//.test(code(f)));

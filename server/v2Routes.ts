@@ -13,19 +13,29 @@ import { getDataStatus } from './dataStatus.js';
 import { majorLeagueClubs } from './org.js';
 import { importedAt } from './playerStateRoutes.js';
 import { buildCatalog, type Catalog } from './presentation/catalog.js';
+import { assertAuthored } from './presentation/claim.js';
 import { dataStatusView, type DataStatusView } from './presentation/dataStatusWords.js';
 import { currentOrganization } from './viewingOrganization.js';
 
 export const v2Routes = Router();
 
+/**
+ * Sends a `/v2` payload after the last check: every claim and basis in it was made by the builder and still meets its
+ * rules (`assertAuthored`). A breach is an authoring defect: it throws, and the error handler below answers in words.
+ */
+function send<T>(res: Response<T>, payload: T): void {
+  assertAuthored(payload);
+  res.json(payload);
+}
+
 /** What the app draws on: glossary, stat catalog, club palettes, logos and records, departments and their heads. */
 v2Routes.get('/catalog', (_req, res: Response<Catalog>) => {
-  res.json(buildCatalog(majorLeagueClubs(), currentOrganization()?.id ?? null));
+  send(res, buildCatalog(majorLeagueClubs(), currentOrganization()?.id ?? null));
 });
 
 /** How current the data is, in words. */
 v2Routes.get('/data-status', (_req, res: Response<DataStatusView>) => {
-  res.json(dataStatusView(getDataStatus({ importedAt: importedAt.value })));
+  send(res, dataStatusView(getDataStatus({ importedAt: importedAt.value })));
 });
 
 /** The sentence for a `/v2` request this build does not serve. */
