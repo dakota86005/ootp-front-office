@@ -16,7 +16,7 @@ import { loadConfig, saveConfig } from '../server/config.js';
 import { startJob } from '../server/jobs.js';
 import { registeredRoutes, type RegisteredRoute } from './apiRoutes';
 import {
-  BANNED_JARGON, BANNED_VERDICTS, JARGON_EXCEPTIONS, SURFACE_ROOTS, bannedIn, bannedInPayload, exceptionsUsed, shownStrings,
+  BANNED_JARGON, BANNED_VERDICTS, JARGON_EXCEPTIONS, bannedIn, bannedInPayload, exceptionsUsed, shownStrings,
   type JargonException,
 } from './bannedJargon';
 import { buildSave, type BuiltSave } from './syntheticSave';
@@ -316,12 +316,11 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
     if (Array.isArray(body)) expect(body.length, op.operationId).toBeGreaterThan(0);
     // What the Mac app shows from a /v2 payload passes the banned-jargon list
     if (op.path.startsWith('/api/v2/')) {
-      const root = SURFACE_ROOTS[op.operationId] ?? op.operationId;
-      expect(bannedInPayload(body, root)).toEqual([]);
+      expect(bannedInPayload(body, op.operationId)).toEqual([]);
       // Every basis the app will read meets the builder's rules (an evidence line, no blank sentence, a stamp with its
       // certainty), checked on the bytes that arrive
       expect(servedBasisProblems(body)).toEqual([]);
-      for (const e of exceptionsUsed(body, root)) exceptionsInUse.add(e);
+      for (const e of exceptionsUsed(body, op.operationId)) exceptionsInUse.add(e);
     }
     // Where the server looked for saves depends on the platform, so it is no fixture
     if (op.operationId !== 'getSearchLocations') fixture(`responses/${op.operationId}.json`, json(body));
@@ -557,36 +556,55 @@ describe('the banned-jargon walk over a /v2 payload', () => {
   });
 });
 
-describe('scoped jargon exceptions', () => {
+describe('scoped jargon exceptions (review S5)', () => {
+  const fortyMan = { surface: { department: 'majorLeague', view: 'fortyManOptions' } };
+  const lineup = { surface: { department: 'majorLeague', view: 'lineup' } };
+  const farmFortyMan = { surface: { department: 'farm', view: 'fortyManOptions' } };
   const exceptions: JargonException[] = [
-    { surface: 'majorLeague.fortyMan', phrase: 'waiver priority', reason: 'OOTP\'s own name for the claim order.' },
-    { surface: 'catalog', phrase: 'Win Pct', reason: 'The standings column.' },
+    { department: 'majorLeague', view: 'fortyManOptions', phrase: 'Rule 5 draft percentile', ignoreCase: false, reason: 'A made-up phrase for the test.' },
+    { department: 'catalog', view: 'glossary', field: 'display', phrase: 'Win Pct', ignoreCase: false, reason: 'The standings column.' },
+    { department: 'majorLeague', view: 'fortyManOptions', phrase: 'waiver priority', ignoreCase: true, reason: 'Tries to exempt a verdict.' },
   ];
 
-  it('allows the phrase on its surface and nowhere else, and still checks the rest of the string', () => {
-    expect(bannedIn('Third in waiver priority', [BANNED_VERDICTS], 'majorLeague.fortyMan', exceptions)).toEqual([]);
-    expect(bannedIn('Third in waiver priority', [BANNED_VERDICTS], 'majorLeague.lineup', exceptions).map(String)).toEqual([String(/\bpriority\b/i)]);
-    expect(bannedIn('Third in waiver priority', [BANNED_VERDICTS], undefined, exceptions)).toHaveLength(1);
-    expect(bannedIn('Waiver priority: you should claim him', [BANNED_VERDICTS], 'majorLeague.fortyMan', exceptions).map(String)).toEqual([String(/\bshould\b/i)]);
-    // Only the phrase as written, whole words: "priority" alone is still a verdict there
-    expect(bannedIn('A priority', [BANNED_VERDICTS], 'majorLeague.fortyMan', exceptions)).toHaveLength(1);
+  it('allows the phrase on its department\'s view and nowhere else, and still checks the rest of the string', () => {
+    const text = 'Rule 5 draft percentile: third';
+    expect(bannedIn(text, [BANNED_JARGON], fortyMan, exceptions)).toEqual([]);
+    // Another view of the same department, the same view of another department, and no place at all: not allowed
+    for (const at of [lineup, farmFortyMan, undefined]) expect(bannedIn(text, [BANNED_JARGON], at, exceptions).map(String)).toEqual([String(/percentile/i)]);
+    // The rest of the same string is still read
+    expect(bannedIn(`${text}, a talent`, [BANNED_JARGON], fortyMan, exceptions).map(String)).toEqual([String(/(?<!pays for )\btalent\b/i)]);
   });
 
-  it('lets a surface\'s exception cover the surfaces under it, read from the payload\'s first field', () => {
-    const payload = { glossary: [{ display: 'Win Pct', text: 'Wins over games.' }], other: [{ display: 'Win Pct' }] };
-    expect(bannedInPayload(payload, 'catalog', exceptions)).toEqual([]);
-    expect(bannedInPayload(payload, 'league', exceptions).map((f) => f.path)).toEqual(['$.glossary[0].display', '$.other[0].display']);
-    expect(exceptionsUsed(payload, 'catalog', exceptions)).toEqual([exceptions[1]]);
+  it('never exempts a verdict word, whatever the exception says', () => {
+    expect(bannedIn('Third in waiver priority', [BANNED_JARGON, BANNED_VERDICTS], fortyMan, exceptions).map(String)).toEqual([String(/\bpriority\b/i)]);
   });
 
-  it('gives every exception in force a surface, a phrase and a one-line reason', () => {
+  it('matches the case it states: an exact-case exception does not allow another spelling', () => {
+    expect(bannedIn('Win Pct', [BANNED_JARGON], { surface: { department: 'catalog', view: 'glossary' }, field: 'display' }, exceptions)).toEqual([]);
+    expect(bannedIn('win pct', [BANNED_JARGON], { surface: { department: 'catalog', view: 'glossary' }, field: 'display' }, exceptions)).toHaveLength(1);
+  });
+
+  it('holds to its field when it names one, read from a payload\'s own paths', () => {
+    const payload = { glossary: [{ display: 'Win Pct', text: 'Win Pct is wins over games.' }], stats: [{ display: 'Win Pct' }] };
+    expect(bannedInPayload(payload, 'getCatalog', exceptions).map((f) => f.path)).toEqual(['$.glossary[0].text', '$.stats[0].display']);
+    // An operation with no surface gets no exception
+    expect(bannedInPayload(payload, 'getSomethingElse', exceptions)).toHaveLength(3);
+    expect(exceptionsUsed(payload, 'getCatalog', exceptions)).toEqual([exceptions[1]]);
+  });
+
+  it('gives every exception in force a department, a view, a phrase, its case and a one-line reason', () => {
     for (const e of JARGON_EXCEPTIONS) {
-      expect(e.surface).toMatch(/^[A-Za-z]+(\.[A-Za-z]+)*$/);
+      expect(e.department).toMatch(/^[A-Za-z]+$/);
+      expect(e.view).toMatch(/^[A-Za-z]+$/);
+      expect(typeof e.ignoreCase).toBe('boolean');
       expect(e.phrase.trim()).toBe(e.phrase);
       expect(e.phrase.length).toBeGreaterThan(1);
       expect(e.reason).not.toMatch(/\n/);
       expect(e.reason.length).toBeGreaterThan(10);
       expect(e.reason.length).toBeLessThanOrEqual(140);
+      // An exception may not name a verdict: it would be read on the whole string anyway, so it would be dead
+      expect(bannedIn(e.phrase, [BANNED_VERDICTS]), e.phrase).toEqual([]);
     }
   });
 });
+

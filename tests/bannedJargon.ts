@@ -10,10 +10,11 @@
  *
  * Three patterns are marginally narrower than a page's old copy, accepted at N2: "pays for talent" (the philosophy's
  * lean) is allowed, `\bOff Value\b` no longer matches "Off Values", and a doc id needs a word boundary ("AD-012" passes).
- * The list was tuned on Player Value's pages and applies to every `/v2` string. A plain word it would reject on one
- * surface ("PCT" in the standings column's glossary entry, "waiver priority" on the 40-man view) gets a scoped
- * exception (`JARGON_EXCEPTIONS`: one phrase, one surface, one line saying why), never a weaker pattern: the phrase is
- * allowed there and only there, and every other word of the same string is still checked.
+ * The list was tuned on Player Value's pages and applies to every `/v2` string. A plain word the jargon list would
+ * reject on one view ("PCT" in the standings column's glossary entry) gets a scoped exception (`JARGON_EXCEPTIONS`: one
+ * phrase, one department and view, optionally one field, its case stated, one line saying why), never a weaker pattern:
+ * the phrase is allowed there and only there, every other word of the same string is still checked, and no exception
+ * ever exempts a verdict word ("waiver priority" stays out: "priority" is a verdict).
  */
 
 /** Method words, internal names and rendering leaks. */
@@ -55,54 +56,84 @@ export const BANNED_VERDICTS: readonly RegExp[] = [
 ];
 
 /**
- * A phrase the list would reject that is plain on one surface. `surface` names where it may stand: a v2 payload's
- * surface is `<root>.<first field>` (`catalog.glossary`, `catalog.stats`; `SURFACE_ROOTS` names each operation's root),
- * and an exception for `catalog` covers every surface under it. The phrase matches whole words, ignoring case.
+ * Where a shown string stands: a department and one of its views (`majorLeague` / `fortyManOptions`), or, for a payload
+ * that is not a department's view, its own name and part (`catalog` / `glossary`). Never an operation alone: one
+ * operation (the planned per-view endpoint) serves every department's views.
+ */
+export interface Surface {
+  department: string;
+  view: string;
+}
+
+/**
+ * A phrase the jargon list would reject that is the plain word on one view: allowed there, in one shown field when
+ * `field` is named, and nowhere else. It never exempts a verdict word (the verdict list is always read on the whole
+ * string), and its case is stated: `ignoreCase: false` matches the phrase exactly as written.
  */
 export interface JargonException {
-  surface: string;
+  department: string;
+  view: string;
+  field?: (typeof SHOWN_FIELDS)[number];
   phrase: string;
+  ignoreCase: boolean;
   /** One line: why this phrase is the plain word here. */
   reason: string;
 }
 
 export const JARGON_EXCEPTIONS: readonly JargonException[] = [
-  { surface: 'catalog.glossary', phrase: 'PCT', reason: 'The standings column is PCT in OOTP and every box score; the glossary is where it is explained.' },
-  { surface: 'catalog', phrase: 'Fielding Independent Pitching', reason: "FIP's own name, spelled out where the statistic is explained." },
+  { department: 'catalog', view: 'glossary', field: 'display', phrase: 'PCT', ignoreCase: false, reason: 'The standings column is PCT in OOTP and every box score; the glossary is where it is explained.' },
+  { department: 'catalog', view: 'glossary', field: 'text', phrase: 'Fielding Independent Pitching', ignoreCase: false, reason: "FIP's own name, spelled out where the statistic is explained." },
+  { department: 'catalog', view: 'stats', field: 'text', phrase: 'Fielding Independent Pitching', ignoreCase: false, reason: "FIP's own name, spelled out where the statistic is explained." },
 ];
 
-/** The surface root of each `/v2` operation's payload (its operationId otherwise). */
-export const SURFACE_ROOTS: Readonly<Record<string, string>> = { getCatalog: 'catalog' };
+/**
+ * Each `/v2` operation's surface for a shown string at a path, from the request's parameters when it has them (the
+ * per-view endpoint: `{ department: params.dept, view: params.view }`). An operation not listed has no surface, so no
+ * exception applies to it.
+ */
+export const SURFACES: Readonly<Record<string, (path: string, params: Readonly<Record<string, string>>) => Surface | null>> = {
+  getCatalog: (path) => {
+    const part = /^\$\.([A-Za-z0-9_]+)/.exec(path)?.[1];
+    return part ? { department: 'catalog', view: part } : null;
+  },
+  getDataStatusWords: () => ({ department: 'frontOffice', view: 'dataStatus' }),
+};
 
-/** The surface a shown string sits on: the payload's root and the first field of its path (`catalog.glossary`). */
-export function surfaceOf(root: string, path: string): string {
-  const first = /^\$\.([A-Za-z0-9_]+)/.exec(path)?.[1];
-  return first ? `${root}.${first}` : root;
+/** Where a shown string stands and which field it is, for the exceptions. */
+export interface Placement {
+  surface: Surface;
+  field?: string;
 }
-
-const covers = (exception: string, surface: string): boolean => surface === exception || surface.startsWith(`${exception}.`);
 
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** The text with the phrases excepted on this surface taken out, so the rest of it is still checked. */
-export function withoutExceptions(text: string, surface: string | undefined, exceptions: readonly JargonException[] = JARGON_EXCEPTIONS): string {
-  if (!surface) return text;
+const applies = (e: JargonException, at: Placement): boolean =>
+  e.department === at.surface.department && e.view === at.surface.view && (e.field === undefined || e.field === at.field);
+
+/** The text with the phrases excepted here taken out, so the rest of it is still read against the jargon list. */
+export function withoutExceptions(text: string, at: Placement | undefined, exceptions: readonly JargonException[] = JARGON_EXCEPTIONS): string {
+  if (!at) return text;
   let out = text;
   for (const e of exceptions) {
-    if (covers(e.surface, surface)) out = out.replace(new RegExp(`(?<![\\w-])${escape(e.phrase)}(?![\\w-])`, 'gi'), ' ');
+    if (applies(e, at)) out = out.replace(new RegExp(`(?<![\\w-])${escape(e.phrase)}(?![\\w-])`, e.ignoreCase ? 'gi' : 'g'), ' ');
   }
   return out;
 }
 
-/** The banned patterns a text contains (empty when it reads clean); on a named surface, its exceptions are allowed. */
+const JARGON = new Set<RegExp>(BANNED_JARGON);
+
+/**
+ * The banned patterns a text contains (empty when it reads clean). Where it is placed, that place's exceptions are
+ * taken out before the jargon list is read; every other list (the verdicts) is read on the whole string.
+ */
 export function bannedIn(
   text: string,
   lists: ReadonlyArray<readonly RegExp[]> = [BANNED_JARGON],
-  surface?: string,
+  at?: Placement,
   exceptions: readonly JargonException[] = JARGON_EXCEPTIONS,
 ): RegExp[] {
-  const checked = withoutExceptions(text, surface, exceptions);
-  return lists.flat().filter((pattern) => pattern.test(checked));
+  const stripped = withoutExceptions(text, at, exceptions);
+  return lists.flat().filter((pattern) => pattern.test(JARGON.has(pattern) ? stripped : text));
 }
 
 /** The fields of a `/api/v2` payload the Mac app shows as text (a `Claim`'s line and help tag, a value's or cell's display). */
@@ -154,17 +185,22 @@ export function basisStrings(payload: unknown): Array<{ path: string; text: stri
 }
 
 /**
- * Each shown string in a payload that carries a banned word or verdict, with the pattern it matched. With a surface
- * root (`catalog`), each string's surface is `surfaceOf(root, path)` and that surface's exceptions are allowed.
+ * Each shown string in a payload that carries a banned word or verdict, with the pattern it matched. Given the
+ * operation (and the request's parameters), each string is placed on its surface and field, and that place's
+ * exceptions are allowed.
  */
 export function bannedInPayload(
   payload: unknown,
-  root?: string,
+  operationId?: string,
   exceptions: readonly JargonException[] = JARGON_EXCEPTIONS,
+  params: Readonly<Record<string, string>> = {},
 ): Array<{ path: string; text: string; pattern: string }> {
+  const place = (path: string): Placement | undefined => {
+    const surface = operationId ? SURFACES[operationId]?.(path, params) : null;
+    return surface ? { surface, field: /\.([A-Za-z]+)$/.exec(path)?.[1] } : undefined;
+  };
   const shown = shownStrings(payload).flatMap(({ path, text }) =>
-    bannedIn(text, [BANNED_JARGON, BANNED_VERDICTS], root ? surfaceOf(root, path) : undefined, exceptions)
-      .map((pattern) => ({ path, text, pattern: String(pattern) })),
+    bannedIn(text, [BANNED_JARGON, BANNED_VERDICTS], place(path), exceptions).map((pattern) => ({ path, text, pattern: String(pattern) })),
   );
   const basis = basisStrings(payload).flatMap(({ path, text }) =>
     bannedIn(text, [BANNED_VERDICTS, RENDERING_LEAKS]).map((pattern) => ({ path, text, pattern: String(pattern) })),
@@ -172,10 +208,19 @@ export function bannedInPayload(
   return [...shown, ...basis];
 }
 
-/** The exceptions a payload actually leans on (a phrase present on a surface it covers), so a stale one can be found. */
-export function exceptionsUsed(payload: unknown, root: string, exceptions: readonly JargonException[] = JARGON_EXCEPTIONS): JargonException[] {
-  const strings = shownStrings(payload);
+/** The exceptions a payload actually leans on (a phrase present where it applies), so a stale one can be found. */
+export function exceptionsUsed(
+  payload: unknown,
+  operationId: string,
+  exceptions: readonly JargonException[] = JARGON_EXCEPTIONS,
+  params: Readonly<Record<string, string>> = {},
+): JargonException[] {
   return exceptions.filter((e) =>
-    strings.some(({ path, text }) => covers(e.surface, surfaceOf(root, path)) && withoutExceptions(text, surfaceOf(root, path), [e]) !== text),
+    shownStrings(payload).some(({ path, text }) => {
+      const surface = SURFACES[operationId]?.(path, params);
+      if (!surface) return false;
+      const at = { surface, field: /\.([A-Za-z]+)$/.exec(path)?.[1] };
+      return applies(e, at) && withoutExceptions(text, at, [e]) !== text;
+    }),
   );
 }
