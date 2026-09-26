@@ -5,9 +5,10 @@
 #
 #   1. writes the synthetic league into a scratch folder (npm run synthetic:league), never a real save;
 #   2. stages the server for the bundle (npm run mac:stage);
-#   3. runs each package's Swift tests (PennantAPI, PennantKit with the real-server integration test, PennantDesign);
-#   4. runs `xcodebuild test` on the Pennant scheme: the app with its server and the XCUITests, on a fresh scratch
-#      data folder holding the synthetic league;
+#   3. runs each package's Swift tests (PennantAPI, PennantKit and PennantFeatures with their real-server integration
+#      tests, PennantDesign); PennantFeatures also draws the shell's snapshots into build/macos-snapshots/;
+#   4. runs `xcodebuild test` on the Pennant scheme: the app with its server and the XCUITests, each test on a fresh
+#      scratch data folder holding the synthetic league;
 #   5. extracts the XCUITest screenshots with xcresulttool.
 #
 # Output goes to build/macos-test/ (ignored by Git): logs/, Pennant.xcresult and screenshots/. Only summaries and
@@ -50,7 +51,7 @@ run synthetic-league "synthetic-league" npm run synthetic:league -- "$SCRATCH/le
 step "Staging the server (npm run mac:stage)"
 run stage "\[stage\] staged" npm run mac:stage || failed=1
 
-for package in PennantAPI PennantKit PennantDesign; do
+for package in PennantAPI PennantKit PennantDesign PennantFeatures; do
   step "swift test: $package"
   (cd "$ROOT/macos/Packages/$package" && \
     run "swift-test-$package" "Test run with|Executed" \
@@ -59,15 +60,15 @@ done
 
 if [ "${PENNANT_TEST_NO_UI:-0}" != "1" ]; then
   step "xcodebuild test: the Pennant scheme (app, server, XCUITests)"
-  UI_DATA="$SCRATCH/ui-data"
-  rm -rf "$UI_DATA" "$OUT/Pennant.xcresult" "$OUT/screenshots"
-  mkdir -p "$UI_DATA"
-  cp "$LEAGUE" "$UI_DATA/league.db"
+  UI_SCRATCH="$SCRATCH/ui"
+  rm -rf "$UI_SCRATCH" "$OUT/Pennant.xcresult" "$OUT/screenshots"
+  mkdir -p "$UI_SCRATCH"
   signing=()
   if [ "${PENNANT_TEST_UNSIGNED:-0}" = "1" ]; then signing=(CODE_SIGNING_ALLOWED=NO); fi
-  # TEST_RUNNER_ variables reach the test runner without the prefix: the UI tests launch the app on this folder
+  # TEST_RUNNER_ variables reach the test runner without the prefix: each UI test copies the league into a data
+  # folder of its own under the scratch folder and launches the app on it
   run xcodebuild-test "Executed|\*\* TEST" \
-    env TEST_RUNNER_PENNANT_DEV_DATA_DIR="$UI_DATA" TEST_RUNNER_PENNANT_DEV_LOG_DIR="$SCRATCH/ui-logs" \
+    env TEST_RUNNER_PENNANT_UI_SCRATCH="$UI_SCRATCH" TEST_RUNNER_PENNANT_UI_LEAGUE="$LEAGUE" \
     xcodebuild -project "$ROOT/macos/Pennant.xcodeproj" -scheme Pennant -destination 'platform=macOS' \
       -derivedDataPath "$OUT/DerivedData" -resultBundlePath "$OUT/Pennant.xcresult" \
       -skipPackagePluginValidation ${signing[@]+"${signing[@]}"} test || failed=1
@@ -89,6 +90,11 @@ if [ "${PENNANT_TEST_NO_UI:-0}" != "1" ]; then
       echo "Could not extract the attachments (see $LOGS/attachments.log)"
     fi
   fi
+fi
+
+if [ -d "$ROOT/build/macos-snapshots" ]; then
+  echo
+  echo "$(find "$ROOT/build/macos-snapshots" -name '*.png' | wc -l | tr -d ' ') snapshot(s) in build/macos-snapshots/"
 fi
 
 echo
