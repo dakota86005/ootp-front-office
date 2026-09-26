@@ -6,6 +6,7 @@ import { leagueRulesForOrganization } from './leagueRules.js';
 import { rightsFor } from './playerContext.js';
 import { rosterCounts } from './playerRights.js';
 import { organizationPlayerStates } from './playerState.js';
+import { answer, refuse, type Computed } from './computed.js';
 
 export const rosterOpsRoutes = Router();
 
@@ -23,9 +24,16 @@ const teamLabel = `CASE WHEN t.name = t.nickname THEN t.name ELSE t.name || ' ' 
  * (It used to: a Rule 5 flag built on `years_protected_from_rule_5 <= 0` could
  * essentially never fire, because OOTP exports 4 or 5, never a countdown.)
  */
-rosterOpsRoutes.get('/roster-crunch/:orgId', (req, res) => {
-  const orgId = Number(req.params.orgId);
-  if (!tableExists('players_roster_status')) return res.status(400).json({ error: 'No roster data imported yet' });
+/** The roster crunch (`GET /api/roster-crunch/:orgId`): counts against the limits, the players with issues, the 40-man. */
+export type RosterCrunch = ReturnType<typeof crunchOf>;
+
+/** The organization's 40-man, options and DFA picture, or why it cannot be read (the route's own answer). */
+export function computeRosterCrunch(orgId: number): Computed<RosterCrunch> {
+  if (!tableExists('players_roster_status')) return refuse(400, 'No roster data imported yet');
+  return answer(crunchOf(orgId));
+}
+
+function crunchOf(orgId: number) {
 
   const states = organizationPlayerStates(orgId);
   const positions = new Map(
@@ -90,7 +98,7 @@ rosterOpsRoutes.get('/roster-crunch/:orgId', (req, res) => {
   const withIssues = players.filter((p) => p.issues.length > 0);
   withIssues.sort((a, b) => b.issues.length - a.issues.length);
 
-  res.json({
+  return {
     counts: {
       active: counts.active ?? players.filter((p) => p.on26).length,
       fortyMan: counts.fortyMan ?? fortyMan.length,
@@ -102,7 +110,13 @@ rosterOpsRoutes.get('/roster-crunch/:orgId', (req, res) => {
     },
     issues: withIssues,
     fortyMan: fortyMan.sort((a, b) => (a.on26 === b.on26 ? 0 : a.on26 ? -1 : 1)),
-  });
+  };
+}
+
+rosterOpsRoutes.get('/roster-crunch/:orgId', (req, res) => {
+  const crunch = computeRosterCrunch(Number(req.params.orgId));
+  if (!crunch.ok) return res.status(crunch.status).json({ error: crunch.error });
+  res.json(crunch.body);
 });
 
 // ── Leaderboards ────────────────────────────────────────────────────────
