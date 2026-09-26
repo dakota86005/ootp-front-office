@@ -147,3 +147,67 @@ struct LineSplitterTests {
         #expect(await process.waitForExit() == ProcessExit(status: SIGTERM, bySignal: true))
     }
 }
+
+/// A development build never runs on the real data folder by accident (review S5).
+@Suite("A development build's data folder")
+struct DevelopmentFolderTests {
+    private let bundle = Bundle(for: BundleMarker.self)
+    private func defaults(_ values: [String: Any] = [:]) -> UserDefaults {
+        let name = "pennant-tests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        for (key, value) in values { defaults.set(value, forKey: key) }
+        return defaults
+    }
+
+    @Test("with neither a scratch folder nor the opt-in, no folder is chosen")
+    func unchosen() {
+        let configuration = ServerConfiguration.development(in: bundle, environment: [:], defaults: defaults())
+        #expect(configuration.dataFolderChosen == false)
+        #expect(configuration.logFolder.plainPath.hasPrefix(FileManager.default.temporaryDirectory.plainPath))
+    }
+
+    @Test("a scratch folder, from the environment or a launch argument, is chosen, with its log inside it")
+    func scratch() {
+        let fromEnvironment = ServerConfiguration.development(
+            in: bundle, environment: ["PENNANT_DEV_DATA_DIR": "/tmp/pennant-dev", "OOTP_FO_DB_READONLY": "1"], defaults: defaults()
+        )
+        #expect(fromEnvironment.dataFolderChosen)
+        #expect(fromEnvironment.dataFolder.plainPath == "/tmp/pennant-dev")
+        #expect(fromEnvironment.logFolder.plainPath == "/tmp/pennant-dev/logs")
+        #expect(fromEnvironment.extraEnvironment == ["OOTP_FO_DB_READONLY": "1"])
+        let fromArgument = ServerConfiguration.development(
+            in: bundle, environment: [:], defaults: defaults(["PennantDevDataFolder": "/tmp/pennant-arg", "PennantDevLogFolder": "/tmp/l"])
+        )
+        #expect(fromArgument.dataFolder.plainPath == "/tmp/pennant-arg")
+        #expect(fromArgument.logFolder.plainPath == "/tmp/l")
+    }
+
+    @Test("the real folder only on purpose")
+    func realOnPurpose() {
+        for configuration in [
+            ServerConfiguration.development(in: bundle, environment: ["PENNANT_DEV_USE_REAL_DATA": "1"], defaults: defaults()),
+            ServerConfiguration.development(in: bundle, environment: [:], defaults: defaults(["PennantUseRealDataFolder": true])),
+        ] {
+            #expect(configuration.dataFolderChosen)
+            #expect(configuration.dataFolder.plainPath == ServerConfiguration.releaseDataFolder.plainPath)
+        }
+        #expect(ServerConfiguration.development(in: bundle, environment: ["PENNANT_DEV_USE_REAL_DATA": "yes please"], defaults: defaults()).dataFolderChosen == false)
+    }
+
+    @Test("an unchosen folder starts no server and creates nothing in it")
+    func noServer() async throws {
+        var configuration = try fakeConfiguration()
+        configuration.dataFolderChosen = false
+        let launcher = FakeLauncher { process, _ in process.ready() }
+        let controller = ServerController(configuration: configuration, launcher: launcher, keySource: NoKeys(), timing: fastTiming)
+        await controller.start()
+        #expect(await controller.state == .failed(ServerFailure(kind: .noDataFolderChosen)))
+        #expect(launcher.launched.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: configuration.dataFolder.path) == false)
+        await controller.tryAgain()
+        #expect(launcher.launched.isEmpty)
+    }
+}
+
+private final class BundleMarker {}

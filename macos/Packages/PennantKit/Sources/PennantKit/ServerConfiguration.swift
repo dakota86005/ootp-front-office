@@ -15,6 +15,9 @@ public struct ServerConfiguration: Sendable, Equatable {
     /// Other variables for the child (a development run may add `OOTP_FO_DB_READONLY`). Never a secret: those
     /// travel on stdin.
     public var extraEnvironment: [String: String]
+    /// Whether this data folder was chosen on purpose. Always true in a release build; false for a development
+    /// build given neither a scratch folder nor the explicit opt-in to the real one, which then starts no server.
+    public var dataFolderChosen: Bool
 
     public init(
         nodeExecutable: URL,
@@ -22,7 +25,8 @@ public struct ServerConfiguration: Sendable, Equatable {
         dataFolder: URL,
         logFolder: URL,
         appVersion: String,
-        extraEnvironment: [String: String] = [:]
+        extraEnvironment: [String: String] = [:],
+        dataFolderChosen: Bool = true
     ) {
         self.nodeExecutable = nodeExecutable
         self.serverRoot = serverRoot
@@ -30,6 +34,7 @@ public struct ServerConfiguration: Sendable, Equatable {
         self.logFolder = logFolder
         self.appVersion = appVersion
         self.extraEnvironment = extraEnvironment
+        self.dataFolderChosen = dataFolderChosen
     }
 
     /// The release data folder: `~/Library/Application Support/ootp-front-office` (the D-049 hold on the name).
@@ -96,3 +101,45 @@ extension URL {
         return path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
     }
 }
+
+#if DEBUG
+extension ServerConfiguration {
+    /// A development build's folders (review S5): never the real data folder unless someone chose it.
+    /// - `PENNANT_DEV_DATA_DIR=<folder>` or `-PennantDevDataFolder <folder>`: that scratch folder, with the log in
+    ///   `PENNANT_DEV_LOG_DIR` / `-PennantDevLogFolder`, else `logs/` inside it; `OOTP_FO_DB_READONLY` is passed on.
+    /// - `PENNANT_DEV_USE_REAL_DATA=1` or `-PennantUseRealDataFolder YES`: the release folders, on purpose.
+    /// - Neither: the release paths are named but `dataFolderChosen` is false, so no server starts and nothing is
+    ///   written there; the log goes to a temporary folder.
+    /// Compiled only into Debug builds; a release build always uses `bundled(in:)`'s release folders.
+    public static func development(
+        in bundle: Bundle,
+        environment: [String: String],
+        defaults: UserDefaults
+    ) -> ServerConfiguration {
+        func folder(_ path: String) -> URL {
+            URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
+        }
+        func text(_ variable: String, _ key: String) -> String? {
+            let value = environment[variable] ?? defaults.string(forKey: key)
+            return value?.isEmpty == false ? value : nil
+        }
+        if let data = text("PENNANT_DEV_DATA_DIR", "PennantDevDataFolder") {
+            let dataFolder = folder(data)
+            let logs = text("PENNANT_DEV_LOG_DIR", "PennantDevLogFolder").map(folder)
+                ?? dataFolder.appending(path: "logs", directoryHint: .isDirectory)
+            var extra: [String: String] = [:]
+            if let readOnly = environment["OOTP_FO_DB_READONLY"] { extra["OOTP_FO_DB_READONLY"] = readOnly }
+            return .bundled(in: bundle, dataFolder: dataFolder, logFolder: logs, extraEnvironment: extra)
+        }
+        if environment["PENNANT_DEV_USE_REAL_DATA"] == "1" || defaults.bool(forKey: "PennantUseRealDataFolder") {
+            return .bundled(in: bundle)
+        }
+        var unchosen = ServerConfiguration.bundled(
+            in: bundle,
+            logFolder: FileManager.default.temporaryDirectory.appending(path: "Pennant Dev logs", directoryHint: .isDirectory)
+        )
+        unchosen.dataFolderChosen = false
+        return unchosen
+    }
+}
+#endif

@@ -53,6 +53,9 @@ public struct ServerFailure: Sendable, Equatable {
         case couldNotLaunch
         /// The server did not accept the handshake (exit code 2).
         case handshake
+        /// A development build was given no data folder (neither a scratch folder nor the opt-in to the real one), so
+        /// no server was started.
+        case noDataFolderChosen
         /// The first-run backup could not be taken, so no server was started on the folder (section 7.5). `detail`
         /// holds the error.
         case backupFailed
@@ -288,6 +291,13 @@ public actor ServerController {
         stopRequested = false
         phase = .none
         set(.starting)
+
+        // A development build with no chosen folder never touches one
+        guard configuration.dataFolderChosen else {
+            log.write("no data folder chosen for this development build; not starting", source: "app")
+            set(.failed(ServerFailure(kind: .noDataFolderChosen)))
+            return
+        }
 
         let manager = FileManager.default
         guard manager.isExecutableFile(atPath: configuration.nodeExecutable.plainPath),

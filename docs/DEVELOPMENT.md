@@ -255,10 +255,11 @@ build signs with the Apple Development identity on team `6T7RV2A4DQ` if the Mac 
 `CODE_SIGNING_ALLOWED=NO`, and to build without the server (as CI does), `PENNANT_SKIP_SERVER=YES`.
 
 **Run it on a scratch folder, never the real one.** A Debug build reads its data folder from `PENNANT_DEV_DATA_DIR` (or
-the launch argument `-PennantDevDataFolder <folder>`; the log goes to `PENNANT_DEV_LOG_DIR`, else `logs/` inside it). A
-Release build ignores both. Without the override a Debug build uses the real data folder, like the Electron app: set it
-in the scheme's Run environment (in your own, unshared scheme settings) or launch from a shell. A synthetic league to
-point it at:
+the launch argument `-PennantDevDataFolder <folder>`; the log goes to `PENNANT_DEV_LOG_DIR`, else `logs/` inside it). To
+run it on the real data folder, say so: `PENNANT_DEV_USE_REAL_DATA=1` (or `-PennantUseRealDataFolder YES`). With neither,
+a Debug build starts no server and says "No data folder chosen for this development build". A Release build ignores all
+of these and uses the real folder. Set them in the scheme's Run environment (in your own, unshared scheme settings) or
+launch from a shell. A synthetic league to point it at:
 
 ```bash
 npm run synthetic:league -- /tmp/pennant-dev

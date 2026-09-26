@@ -19,6 +19,13 @@ struct RootView: View {
                 WaitingView(title: "Stopping…")
             case .ready:
                 ReadyView()
+            case .failed(let failure) where failure.kind == .noDataFolderChosen:
+                ContentUnavailableView {
+                    Label(failure.kind.title, systemImage: "folder.badge.questionmark")
+                } description: {
+                    Text("Set PENNANT_DEV_DATA_DIR (or -PennantDevDataFolder) to a scratch folder, or choose the real folder on purpose with PENNANT_DEV_USE_REAL_DATA=1 (or -PennantUseRealDataFolder YES).")
+                }
+                .accessibilityIdentifier("server.noDataFolder")
             case .failed(let failure):
                 ServerProblemView(
                     title: failure.kind.title,
@@ -43,6 +50,7 @@ extension ServerFailure.Kind {
         case .statusCheck: "The server did not answer"
         case .crashedRepeatedly: "The server keeps stopping"
         case .backupFailed: "The data folder could not be backed up"
+        case .noDataFolderChosen: "No data folder chosen for this development build"
         }
     }
 }
