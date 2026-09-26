@@ -90,6 +90,23 @@ public final class AppModel {
     }
     #endif
 
+    // MARK: What stores reload on
+
+    /// What a department store keys its data on (`.task(id: model.storeKey)`): the last import, the current club,
+    /// and the restores. Any of them changing means the served data may have changed.
+    public struct StoreKey: Hashable, Sendable {
+        public var importStamp: String
+        public var club: ClubRef?
+        public var restores: Int
+    }
+
+    /// Nil until the server is ready and its settings (with the served club) are read, so a store loads once at
+    /// launch rather than once for the first status and again when the club arrives.
+    public var storeKey: StoreKey? {
+        guard client != nil, settings != nil else { return nil }
+        return StoreKey(importStamp: importStamp, club: club?.ref, restores: restoreCount)
+    }
+
     // MARK: Derived from the served status
 
     public var isImporting: Bool { status?.importing ?? false }

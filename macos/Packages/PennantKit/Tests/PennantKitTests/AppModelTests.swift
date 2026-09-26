@@ -180,3 +180,38 @@ struct CurrentClubTests {
         #expect(club?.source == .other("commissioner"))
     }
 }
+
+/// Stores reload on the import, the club and restores, once at launch (review N5).
+@Suite("The stores' reload key")
+@MainActor
+struct StoreKeyTests {
+    @Test("nil until ready with settings; then the import stamp and the served club; a restore moves it")
+    func storeKey() async throws {
+        let configuration = try fakeConfiguration()
+        let status = try fixtureStatus()
+        let transport = RoutedTransport([
+            "/api/status": try RoutedTransport.json("getStatus"),
+            "/api/settings": try RoutedTransport.json("getSettings"),
+            "/api/orgs": try RoutedTransport.json("listOrgs"),
+            "/api/data-status": try RoutedTransport.json("getDataStatus"),
+        ])
+        let controller = ServerController(
+            configuration: configuration, launcher: FakeLauncher { process, _ in process.ready() }, keySource: NoKeys(),
+            probe: { _, _ in status }, timing: fastTiming
+        )
+        let model = AppModel(configuration: configuration, controller: controller) { connection in
+            PennantClient.make(port: connection.port, token: connection.token, transport: transport)
+        }
+        #expect(model.storeKey == nil)
+        await model.start()
+        #expect(await eventually { model.storeKey != nil })
+        let first = try #require(model.storeKey)
+        #expect(first == AppModel.StoreKey(importStamp: "", club: ClubRef(id: 1), restores: 0))
+
+        _ = try await model.restoreBackup()
+        #expect(await eventually { model.storeKey?.restores == 1 })
+        #expect(model.storeKey != first)
+        await model.shutdown()
+        #expect(model.storeKey == nil)
+    }
+}
