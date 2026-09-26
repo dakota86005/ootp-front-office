@@ -57,13 +57,15 @@ private func status(
     progress: Components.Schemas.ImportProgress? = nil,
     finishedAt: String? = nil,
     lastError: String? = nil,
-    csvDirExists: Bool = true
+    csvDirExists: Bool = true,
+    interruptedSince: String? = nil
 ) throws -> Components.Schemas.ServerStatus {
     var status = try #require(PreviewFixtures.status(configured: true))
     status.importing = importing
     status.importProgress = progress
     status.lastError = lastError
     status.csvDirExists = csvDirExists
+    status.importInterruptedSince = interruptedSince
     status.lastImport = finishedAt.map {
         .init(tables: 1, rows: 3, startedAt: "2040-07-01T11:59:00.000Z", finishedAt: $0, files: [])
     }
@@ -167,7 +169,7 @@ struct SetupModelTests {
         try server.answer("setSave", fixture: "setSave-no-folder", status: 400)
         await model.choose(PreviewFixtures.saves[0], status: nil)
         #expect(model.step == .findSave)
-        #expect(model.folderProblem == "csvDir is required")
+        #expect(model.folderProblem == .served("csvDir is required"))
     }
 
     @Test("a picked folder that is an export is chosen at once")
@@ -194,18 +196,88 @@ struct SetupModelTests {
         try server.answer("resolveFolder", fixture: "resolveFolder-no-folder", status: 400)
         await model.useFolder(status: nil)
         #expect(model.folderChoices == nil)
-        #expect(model.folderProblem == "No folder given.")
+        #expect(model.folderProblem == .served("No folder given."))
     }
 
-    @Test("a status from before the import is not mistaken for its end")
+    @Test("a status from before the import was seen running is not taken for its end or its failure")
     func waitsForItsOwnImport() async throws {
         let model = makeModel()
-        server.answer("getStatus", (200, try json(status(finishedAt: "2040-07-01T10:00:00.000Z"))))
+        server.answer("getStatus", (200, try json(status(importing: true, finishedAt: "2040-07-01T10:00:00.000Z"))))
         await model.choose(PreviewFixtures.saves[0], status: try status(finishedAt: "2040-07-01T10:00:00.000Z"))
         #expect(model.step == .importing)
+        // The event stream's view can lag behind the request: an old status (not importing, the old stamp, an old
+        // failure) that arrives after the fresh read showed the import running is the old import's
+        await model.observe(try status(importing: true, finishedAt: "2040-07-01T10:00:00.000Z"))
         #expect(model.importProblem == nil)
-        await model.observe(try status(finishedAt: "2040-07-01T10:00:00.000Z", lastError: "an older failure"))
+    }
+
+    @Test("an import that fails before the window sees it running is a served failure with Try Again, never a hang")
+    func fastFailure() async throws {
+        let model = makeModel()
+        // The fresh read after choosing: the import already ended, the stamp unmoved, the server's sentence set
+        server.answer("getStatus", (200, try json(status(finishedAt: "2040-07-01T10:00:00.000Z", lastError: "players.csv could not be parsed"))))
+        await model.choose(PreviewFixtures.saves[0], status: try status(finishedAt: "2040-07-01T10:00:00.000Z"))
         #expect(model.step == .importing)
-        #expect(model.importProblem == nil)
+        #expect(model.importProblem == .served("players.csv could not be parsed"))
+    }
+
+    @Test("an import that stopped partway is a problem, never a reason to go on to the club")
+    func interrupted() async throws {
+        let model = makeModel()
+        server.answer("getStatus", (200, try json(status(importing: true, finishedAt: "2040-07-01T10:00:00.000Z"))))
+        await model.choose(PreviewFixtures.saves[0], status: try status(finishedAt: "2040-07-01T10:00:00.000Z"))
+        await model.observe(try status(finishedAt: "2040-07-01T10:00:00.000Z", interruptedSince: "2040-07-01T11:00:00.000Z"))
+        #expect(model.importProblem == .didNotFinish(since: "2040-07-01T11:00:00.000Z"))
+        #expect(model.step == .importing)
+    }
+
+    @Test("an import that ended with no new import and no sentence did not finish; the club step waits for a new import")
+    func endedWithoutLanding() async throws {
+        let model = makeModel()
+        server.answer("getStatus", (200, try json(status(importing: true, finishedAt: "2040-07-01T10:00:00.000Z"))))
+        await model.choose(PreviewFixtures.saves[0], status: try status(finishedAt: "2040-07-01T10:00:00.000Z"))
+        await model.observe(try status(finishedAt: "2040-07-01T10:00:00.000Z"))
+        #expect(model.importProblem == .didNotFinish(since: nil))
+        #expect(model.step == .importing)
+    }
+
+    @Test("nothing is chosen while an import runs, and the server's refusal is shown if it comes")
+    func importRunning() async throws {
+        let model = makeModel()
+        await model.choose(PreviewFixtures.saves[0], status: try status(importing: true))
+        #expect(server.bodies(of: "setSave").isEmpty)
+        try server.answer("setSave", fixture: "setSave-import-running", status: 409)
+        await model.choose(PreviewFixtures.saves[0], status: try status())
+        #expect(model.step == .findSave)
+        guard case .served(let sentence) = model.folderProblem else {
+            Issue.record("expected the server's sentence")
+            return
+        }
+        #expect(sentence.contains("already running"))
+    }
+
+    @Test("a failed read of the saves or the clubs is a problem, never \"none found\" or an empty list")
+    func failedReads() async throws {
+        var logged: [String] = []
+        let client = client
+        let model = SetupModel(client: { client }, log: { logged.append($0) })
+        server.answer("listSaves", (500, "{}"))
+        await model.load()
+        guard case .failed = model.loadProblem else {
+            Issue.record("expected a failure, got \(String(describing: model.loadProblem))")
+            return
+        }
+        #expect(!logged.isEmpty)
+        server.answer("listOrgs", (500, "{}"))
+        await model.loadClubs()
+        guard case .failed = model.clubProblem else {
+            Issue.record("expected a failure")
+            return
+        }
+        #expect(model.clubs.isEmpty)
+        #expect(SetupModel(client: { nil }).loadProblem == nil)
+        let down = SetupModel(client: { nil })
+        await down.load()
+        #expect(down.loadProblem == .notRunning)
     }
 }

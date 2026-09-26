@@ -37,11 +37,11 @@ public struct SetupView: View {
         }
         .background(.background)
         .task { if !model.savesLoaded { await model.load() } }
-        .onChange(of: status) { _, next in
+        .onChange(of: status, initial: true) { _, next in
             Task { await model.observe(next) }
         }
         .onChange(of: model.step) { _, step in
-            if step == .done { dismissWindow(id: "setup") }
+            if step == .done { dismissWindow(id: SceneID.setup) }
         }
         .accessibilityIdentifier("setup")
     }
@@ -80,10 +80,27 @@ private struct FindSaveStep: View {
     @State private var selected: String?
     @State private var choosingFolder = false
 
+    /// Nothing is chosen while an import runs: the server would refuse it, and the window says why.
+    private var importing: Bool { status?.importing == true }
+
     var body: some View {
         Form {
+            if importing {
+                Section {
+                    Label {
+                        Text("An import is running. Choose a save when it has finished.")
+                    } icon: {
+                        Image(systemName: "hourglass")
+                    }
+                    ImportProgressView(progress: status?.importProgress)
+                }
+            }
             Section("Saves Pennant found") {
-                if !model.savesLoaded {
+                if let problem = model.loadProblem {
+                    ProblemLine(problem)
+                    Button("Try Again") { Task { await model.load() } }
+                        .accessibilityIdentifier("setup.reload")
+                } else if !model.savesLoaded {
                     ProgressView()
                 } else if model.saves.isEmpty {
                     Text("None found")
@@ -92,23 +109,27 @@ private struct FindSaveStep: View {
                     SaveList(saves: model.saves, selected: $selected)
                 }
             }
-            Section("Or choose a folder") {
+            Section {
+                TextField("Folder", text: $model.folderPath, prompt: Text("The save's folder, or the folder that holds your saves"))
+                    .labelsHidden()
+                    .onSubmit { Task { await model.useFolder(status: status) } }
+                    .accessibilityIdentifier("setup.folderPath")
                 HStack {
-                    TextField("Folder", text: $model.folderPath, prompt: Text(verbatim: "…/Your Save.lg"))
-                        .onSubmit { Task { await model.useFolder(status: status) } }
-                        .accessibilityIdentifier("setup.folderPath")
                     Button("Choose…") { choosingFolder = true }
                         .accessibilityIdentifier("setup.chooseFolder")
+                    Spacer()
                     Button("Use This Folder") { Task { await model.useFolder(status: status) } }
-                        .disabled(model.folderPath.trimmingCharacters(in: .whitespaces).isEmpty || model.busy)
+                        .disabled(model.folderPath.trimmingCharacters(in: .whitespaces).isEmpty || model.busy || importing)
                         .accessibilityIdentifier("setup.useFolder")
                 }
                 if let choices = model.folderChoices {
                     SaveList(saves: choices, selected: $selected)
                 }
                 if let problem = model.folderProblem {
-                    ServedProblem(text: problem)
+                    ProblemLine(problem)
                 }
+            } header: {
+                Text("Or choose a folder")
             }
             if !model.locations.isEmpty {
                 Section("Where Pennant looked") {
@@ -146,7 +167,7 @@ private struct FindSaveStep: View {
                     }
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(selected == nil || model.busy)
+                .disabled(selected == nil || model.busy || importing)
                 .accessibilityIdentifier("setup.useSave")
             }
             .padding(16)
@@ -180,7 +201,7 @@ private struct SaveList: View {
                     Spacer()
                     HStack(spacing: 4) {
                         Text("Export files")
-                        Text(verbatim: "\(save.csvCount)").monospacedDigit()
+                        Text(save.csvCount, format: .number).monospacedDigit()
                     }
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -213,13 +234,22 @@ private struct ImportStep: View {
                 }
                 if let problem = model.importProblem {
                     switch problem {
-                    case .served(let text), .request(let text): ServedProblem(text: text)
-                    case .didNotStart: ServedProblem(text: nil)
+                    case .served(let text): ProblemLine(Text(verbatim: text))
+                    case .request(let request): ProblemLine(request)
+                    case .didNotStart: ProblemLine(Text("The import did not start"))
+                    case .didNotFinish(let since):
+                        ProblemLine(Text("The import did not finish"))
+                        if let started = ServedText.timestamp(since) {
+                            LabeledContent("Started") { Text(verbatim: started) }
+                        }
                     }
                     HStack {
                         Button("Choose Another Save") { model.restart() }
+                        Spacer()
                         Button("Try Again") { Task { await model.retryImport(status: status) } }
                             .keyboardShortcut(.defaultAction)
+                            .disabled(model.busy || status?.importing == true)
+                            .accessibilityIdentifier("setup.retryImport")
                     }
                 } else {
                     ImportProgressView(progress: model.progress)
@@ -241,22 +271,32 @@ private struct PickClubStep: View {
     var body: some View {
         Form {
             Section("Your club") {
-                Picker("Club", selection: $model.selectedClub) {
-                    ForEach(model.clubs, id: \.teamId) { club in
-                        HStack {
-                            Text(verbatim: club.label)
-                            if club.isHuman {
-                                Text("Managed by you in this save").foregroundStyle(.secondary)
-                            }
-                        }
-                        .tag(Optional(club.teamId))
+                if model.clubs.isEmpty, let problem = model.clubProblem {
+                    ProblemLine(problem)
+                    HStack {
+                        Button("Choose Another Save") { model.restart() }
+                        Spacer()
+                        Button("Try Again") { Task { await model.loadClubs() } }
+                            .accessibilityIdentifier("setup.reloadClubs")
                     }
-                }
-                .pickerStyle(.inline)
-                .labelsHidden()
-                .accessibilityIdentifier("setup.clubs")
-                if let problem = model.clubProblem {
-                    ServedProblem(text: problem)
+                } else {
+                    Picker("Club", selection: $model.selectedClub) {
+                        ForEach(model.clubs, id: \.teamId) { club in
+                            HStack {
+                                Text(verbatim: club.label)
+                                if club.isHuman {
+                                    Text("Managed by you in this save").foregroundStyle(.secondary)
+                                }
+                            }
+                            .tag(Optional(club.teamId))
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    .accessibilityIdentifier("setup.clubs")
+                    if let problem = model.clubProblem {
+                        ProblemLine(problem)
+                    }
                 }
             }
         }
@@ -273,22 +313,6 @@ private struct PickClubStep: View {
             .padding(16)
             .background(.bar)
         }
-    }
-}
-
-/// A served sentence about something that went wrong, with a symbol so it is not colour alone; with no sentence, a
-/// structural title.
-struct ServedProblem: View {
-    let text: String?
-
-    var body: some View {
-        Label {
-            if let text { Text(verbatim: text) } else { Text("The import did not start") }
-        } icon: {
-            Image(systemName: "exclamationmark.triangle.fill")
-        }
-        .foregroundStyle(.red)
-        .accessibilityIdentifier("setup.problem")
     }
 }
 

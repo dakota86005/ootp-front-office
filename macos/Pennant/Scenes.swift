@@ -17,7 +17,7 @@ struct MainWindowScene: View {
         Group {
             if let window {
                 MainWindowView(window: window)
-                    .onChange(of: window.historyStorage) { _, data in historyData = data }
+                    .onChange(of: window.history) { _, history in historyData = history.restorationData }
                     .onChange(of: window.inspectorPresented) { _, shown in inspectorPresented = shown }
                     .onChange(of: window.sidebarVisibleStorage) { _, shown in sidebarVisible = shown }
                     .onChange(of: window.expandedStorage) { _, ids in expanded = ids }
@@ -58,7 +58,11 @@ struct SetupScene: View {
         .onAppear {
             guard setup == nil else { return }
             let model = model
-            setup = SetupModel(client: { model.client }, onClubSaved: { await model.reloadAll() })
+            setup = SetupModel(
+                client: { model.client },
+                onClubSaved: { await model.reloadAll() },
+                log: { model.logProblem($0) }
+            )
         }
         .onChange(of: routing.setupRequest) {
             setup?.restart()

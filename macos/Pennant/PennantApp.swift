@@ -1,3 +1,4 @@
+import FeatureCore
 import PennantKit
 import Shell
 import SwiftUI

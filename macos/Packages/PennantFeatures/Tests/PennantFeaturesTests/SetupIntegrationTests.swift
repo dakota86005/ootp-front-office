@@ -72,7 +72,7 @@ struct SetupIntegrationTests {
         #expect(await until { model.isReady && model.settings != nil }, "not ready; see \(configuration.logFile.path)")
         #expect(model.needsSetup)
 
-        let setup = SetupModel(client: { model.client }, onClubSaved: { await model.reloadAll() })
+        let setup = SetupModel(client: { model.client }, onClubSaved: { await model.reloadAll() }, log: { model.logProblem($0) })
         await setup.load()
         #expect(setup.savesLoaded)
 
@@ -81,8 +81,16 @@ struct SetupIntegrationTests {
         #expect(setup.folderProblem == nil)
         #expect(setup.chosen?.name == "Synthetic League")
 
+        // As the window does: each status the event stream brings is passed on when it changes (and the current one
+        // once, as `.onChange(of:initial: true)` does), never polled, so a transition the window would miss is missed
+        // here too
+        var passed = model.status
+        await setup.observe(passed)
         let landed = await until {
-            await setup.observe(model.status)
+            if model.status != passed {
+                passed = model.status
+                await setup.observe(passed)
+            }
             return setup.step != .importing || setup.importProblem != nil
         }
         #expect(landed)
