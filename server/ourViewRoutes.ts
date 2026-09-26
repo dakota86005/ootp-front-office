@@ -3,7 +3,10 @@ import { db, tableExists } from './db.js';
 import { getDataStatus } from './dataStatus.js';
 import { resolvePhilosophy } from './philosophy.js';
 import { clubWinValue, lensPhilosophyFrom, playerOurView } from './playerValue.js';
-import { loadSettings, philosophyForOrg } from './settings.js';
+import { philosophyForOrg } from './settings.js';
+import { viewingOrganization } from './viewingOrganization.js';
+
+export { viewingOrganization };
 
 /**
  * "Our view" of a player's value (Player Value phase 5b, PLAYER_VALUE.md Part 6) and the viewing club's value of a win
@@ -16,28 +19,11 @@ import { loadSettings, philosophyForOrg } from './settings.js';
  */
 export const ourViewRoutes = Router();
 
-type Source = 'requested' | 'configured' | 'human';
-
 function clubName(teamId: number): string | null {
   if (!tableExists('teams')) return null;
   const row = db.prepare(`SELECT name, nickname FROM teams WHERE team_id = ?`).get(teamId) as { name?: unknown; nickname?: unknown } | undefined;
   if (!row) return null;
   return [row.name, row.nickname].filter((x) => typeof x === 'string' && x.length > 0).join(' ') || null;
-}
-
-/** The organization whose view this is, and how it was found; null when none can be. */
-export function viewingOrganization(requested: unknown): { id: number; source: Source } | null {
-  const asked = Number(requested);
-  if (requested !== undefined && requested !== '' && Number.isInteger(asked) && asked > 0) return { id: asked, source: 'requested' };
-  const configured = loadSettings().defaultOrgId;
-  if (typeof configured === 'number' && configured > 0) return { id: configured, source: 'configured' };
-  if (!tableExists('teams')) return null;
-  try {
-    const human = db.prepare(`SELECT team_id FROM teams WHERE human_team = 1 LIMIT 1`).get() as { team_id: number } | undefined;
-    return human ? { id: human.team_id, source: 'human' } : null;
-  } catch {
-    return null;
-  }
 }
 
 /**

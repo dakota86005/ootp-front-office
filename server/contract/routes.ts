@@ -135,7 +135,7 @@ export const operations: Operation[] = [
     operationId: 'getSettings',
     method: 'get',
     path: '/api/settings',
-    summary: 'The preferences, the active provider\'s key state and the data folder.',
+    summary: 'The preferences, the active provider\'s key state, the data folder and the current club.',
     response: 'SettingsResponse',
     reused: true,
   },

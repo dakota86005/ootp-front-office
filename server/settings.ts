@@ -16,6 +16,7 @@ import {
   type PhilosophyProfile,
 } from './philosophy.js';
 import type { Integer } from './contract/primitives.js';
+import { currentOrganization, type CurrentOrganization } from './viewingOrganization.js';
 
 export const AI_FEATURES = ['briefing', 'trade', 'storylines', 'chat'] as const;
 export type AiFeatureId = (typeof AI_FEATURES)[number];
@@ -396,6 +397,8 @@ export interface SettingsResponse {
   settings: Settings;
   apiKey: ApiKeyStatus;
   dataDir: string;
+  /** The club the app is about: the configured organization, else the human-managed one (`viewingOrganization.ts`). */
+  organization: CurrentOrganization | null;
 }
 
 /** A provider on offer, with the model it would use (`GET /api/settings/providers`). */
@@ -412,7 +415,7 @@ export interface ProvidersResponse {
 export const settingsRoutes = Router();
 
 settingsRoutes.get('/settings', (_req, res: Response<SettingsResponse>) => {
-  res.json({ settings: loadSettings(), apiKey: apiKeyStatus(), dataDir: DATA_DIR });
+  res.json({ settings: loadSettings(), apiKey: apiKeyStatus(), dataDir: DATA_DIR, organization: currentOrganization() });
 });
 
 /**

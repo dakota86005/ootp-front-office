@@ -55,6 +55,7 @@ export type { DataStatus, LogSourceStatus } from '../dataStatus.js';
 export type { SaveSourceRequest, SaveSourceResult } from '../playerStateRoutes.js';
 export type { SettingsResponse, ProvidersResponse, ProviderChoice, ApiKeyStatus, KeyStatus, Settings } from '../settings.js';
 export type { ProviderId, ProviderInfo } from '../providers.js';
+export type { CurrentOrganization } from '../viewingOrganization.js';
 import type { Org } from '../org.js';
 export type { Org } from '../org.js';
 /** The major-league clubs (`GET /api/orgs`). */

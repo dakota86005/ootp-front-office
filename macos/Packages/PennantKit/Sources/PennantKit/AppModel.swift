@@ -21,7 +21,7 @@ public final class AppModel {
     public private(set) var settings: Components.Schemas.SettingsResponse?
     /// `/api/orgs`: the major-league clubs.
     public private(set) var orgs: [Components.Schemas.Org] = []
-    /// The club the app is about (configured, else human-managed).
+    /// The club the app is about, as the server resolved it (configured, else human-managed).
     public private(set) var club: CurrentClub?
     /// `/api/data-status`: how current the save, the export and the log are.
     public private(set) var dataStatus: Components.Schemas.DataStatus?
@@ -76,7 +76,7 @@ public final class AppModel {
         model.status = status ?? state.connection?.status
         model.settings = settings
         model.orgs = orgs
-        model.club = CurrentClub.resolve(configuredID: settings?.settings.defaultOrgId, orgs: orgs)
+        model.club = CurrentClub.from(served: settings?.organization, orgs: orgs)
         return model
     }
     #endif
@@ -263,7 +263,7 @@ public final class AppModel {
         } catch {
             note(error, reading: "data status")
         }
-        club = CurrentClub.resolve(configuredID: settings?.settings.defaultOrgId, orgs: orgs)
+        club = CurrentClub.from(served: settings?.organization, orgs: orgs)
     }
 
     private func note(_ error: any Error, reading what: String) {

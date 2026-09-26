@@ -67,8 +67,11 @@ struct ServerIntegrationTests {
         let status = try await client.getStatus().ok.body.json
         #expect(status.app.name == "Pennant")
         let orgs = try await client.listOrgs().ok.body.json
-        #expect(CurrentClub.resolve(configuredID: nil, orgs: orgs)?.ref == ClubRef(id: 1))
         let settings = try await client.getSettings().ok.body.json
+        let club = CurrentClub.from(served: settings.organization, orgs: orgs)
+        #expect(club?.ref == ClubRef(id: 1))
+        #expect(club?.source == .humanManaged)
+        #expect(club?.org?.isHuman == true)
         #expect(URL(fileURLWithPath: settings.dataDir).standardizedFileURL.path
             == configuration.dataFolder.standardizedFileURL.plainPath)
 

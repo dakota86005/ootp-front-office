@@ -21,5 +21,9 @@
     "encrypted": false,
     "storageLabel": "a permission-restricted file (no OS keychain available)"
   },
-  "dataDir": "/tmp/ootp-fo-test"
+  "dataDir": "/tmp/ootp-fo-test",
+  "organization": {
+    "id": 1,
+    "source": "human"
+  }
 }

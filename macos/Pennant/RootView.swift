@@ -113,8 +113,8 @@ private struct ReadyView: View {
                     if let save = status.saveName {
                         LabeledContent("Save") { Text(verbatim: save) }
                     }
-                    if let club = model.club {
-                        LabeledContent("Club") { Text(verbatim: club.org.label) }
+                    if let label = model.club?.org?.label {
+                        LabeledContent("Club") { Text(verbatim: label) }
                     }
                 } header: {
                     Text(verbatim: status.app.name)

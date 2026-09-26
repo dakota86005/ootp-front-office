@@ -44,7 +44,7 @@ struct AppModelTests {
         #expect(model.dataFolderPath == "/tmp/ootp-fo-test")
         #expect(model.orgs.count == 4)
         #expect(model.club?.ref == ClubRef(id: 1))
-        #expect(model.club?.org.label == "Club 1 N")
+        #expect(model.club?.org?.label == "Club 1 N")
         #expect(model.club?.source == .humanManaged)
         #expect(transport.paths.contains("/api/v2/events"))
         await model.shutdown()
@@ -143,26 +143,39 @@ struct CurrentClubTests {
         try JSONDecoder().decode([Components.Schemas.Org].self, from: fixtureData("responses/listOrgs.json"))
     }
 
-    @Test("the configured club wins when the club list has it")
-    func configured() throws {
-        let club = CurrentClub.resolve(configuredID: 3, orgs: try orgs())
-        #expect(club?.ref == ClubRef(id: 3))
+    private func served(_ json: String) throws -> Components.Schemas.CurrentOrganization {
+        try JSONDecoder().decode(Components.Schemas.CurrentOrganization.self, from: Data(json.utf8))
+    }
+
+    @Test("the captured settings serve the human-managed club, and the app takes it as served")
+    func capturedSettings() throws {
+        let settings = try JSONDecoder().decode(
+            Components.Schemas.SettingsResponse.self, from: fixtureData("responses/getSettings.json")
+        )
+        let club = CurrentClub.from(served: settings.organization, orgs: try orgs())
+        #expect(club?.ref == ClubRef(id: 1))
+        #expect(club?.source == .humanManaged)
+        #expect(club?.org?.label == "Club 1 N")
+    }
+
+    @Test("a configured club the list does not have stays the served club, never swapped for the human-managed one")
+    func configuredNotInList() throws {
+        let club = CurrentClub.from(served: try served(#"{"id":999,"source":"configured"}"#), orgs: try orgs())
+        #expect(club?.ref == ClubRef(id: 999))
         #expect(club?.source == .configured)
+        #expect(club?.org == nil)
     }
 
-    @Test("no configured club, or one not in the list: the club the save's human manages")
-    func human() throws {
-        for configured in [nil, 0, 999] as [Int?] {
-            let club = CurrentClub.resolve(configuredID: configured, orgs: try orgs())
-            #expect(club?.ref == ClubRef(id: 1))
-            #expect(club?.source == .humanManaged)
-        }
+    @Test("a configured club in the list is found there")
+    func configured() throws {
+        let club = CurrentClub.from(served: try served(#"{"id":3,"source":"configured"}"#), orgs: try orgs())
+        #expect(club?.org?.label == "Club 3 N")
     }
 
-    @Test("no human-managed club and none configured: no club, never a guess")
-    func none() throws {
-        let others = try orgs().filter { !$0.isHuman }
-        #expect(CurrentClub.resolve(configuredID: nil, orgs: others) == nil)
-        #expect(CurrentClub.resolve(configuredID: nil, orgs: []) == nil)
+    @Test("no served club is no club, never a guess; a newer source is kept as it came")
+    func noneOrNewer() throws {
+        #expect(CurrentClub.from(served: nil, orgs: try orgs()) == nil)
+        let club = CurrentClub.from(served: try served(#"{"id":2,"source":"commissioner"}"#), orgs: try orgs())
+        #expect(club?.source == .other("commissioner"))
     }
 }

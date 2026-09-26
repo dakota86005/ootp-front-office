@@ -262,7 +262,7 @@
     "/api/settings": {
       "get": {
         "operationId": "getSettings",
-        "summary": "The preferences, the active provider's key state and the data folder.",
+        "summary": "The preferences, the active provider's key state, the data folder and the current club.",
         "tags": [
           "reused"
         ],
@@ -462,6 +462,33 @@
           "csvDir"
         ],
         "description": "The save to use (`POST /api/config`): its CSV export folder and its name."
+      },
+      "CurrentOrganization": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "configured",
+                  "human"
+                ]
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "source"
+        ],
+        "description": "The club the app is about when nothing names one: the configured organization, else the one the save's human manages; null when neither is known. A configured id is taken as configured even when the club list no longer has it (the server's rule for every view), so a client shows that club as not found rather than quietly switching clubs."
       },
       "DataStatus": {
         "type": "object",
@@ -2028,6 +2055,10 @@
           },
           "dataDir": {
             "type": "string"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/CurrentOrganization",
+            "description": "The club the app is about: the configured organization, else the human-managed one (`viewingOrganization.ts`)."
           }
         },
         "required": [
