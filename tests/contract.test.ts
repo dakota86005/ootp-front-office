@@ -13,7 +13,10 @@ import { api, importState, runImport } from '../server/api.js';
 import { loadConfig, saveConfig } from '../server/config.js';
 import { startJob } from '../server/jobs.js';
 import { registeredRoutes, type RegisteredRoute } from './apiRoutes';
-import { BANNED_JARGON, BANNED_VERDICTS, bannedIn, bannedInPayload, shownStrings } from './bannedJargon';
+import {
+  BANNED_JARGON, BANNED_VERDICTS, JARGON_EXCEPTIONS, SURFACE_ROOTS, bannedIn, bannedInPayload, exceptionsUsed, shownStrings,
+  type JargonException,
+} from './bannedJargon';
 import { buildSave, type BuiltSave } from './syntheticSave';
 
 /**
@@ -273,6 +276,8 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
   });
 
   const reads = operations.filter((op) => op.method === 'get' && !op.stream);
+  /** The scoped jargon exceptions the live payloads lean on; one none of them uses is stale. */
+  const exceptionsInUse = new Set<JargonException>();
   const SAMPLE_PARAMS: Record<string, () => string> = { orgId: () => String(save.org) };
 
   it('has JSON GETs to check, so the check cannot pass vacuously', () => {
@@ -293,10 +298,18 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
     // Something to check: an empty list proves nothing about its items' shape
     if (Array.isArray(body)) expect(body.length, op.operationId).toBeGreaterThan(0);
     // What the Mac app shows from a /v2 payload passes the banned-jargon list
-    if (op.path.startsWith('/api/v2/')) expect(bannedInPayload(body)).toEqual([]);
+    if (op.path.startsWith('/api/v2/')) {
+      const root = SURFACE_ROOTS[op.operationId] ?? op.operationId;
+      expect(bannedInPayload(body, root)).toEqual([]);
+      for (const e of exceptionsUsed(body, root)) exceptionsInUse.add(e);
+    }
     // Where the server looked for saves depends on the platform, so it is no fixture
     if (op.operationId !== 'getSearchLocations') fixture(`responses/${op.operationId}.json`, json(body));
   }, SLOW);
+
+  it('uses every scoped jargon exception in force, so a stale one is found', () => {
+    expect(JARGON_EXCEPTIONS.filter((e) => !exceptionsInUse.has(e))).toEqual([]);
+  });
 
   /**
    * The POSTs, in the answers that are safe to cause here (the synthetic data folder is a temporary one). Setting a
@@ -489,5 +502,45 @@ describe('the banned-jargon walk over a /v2 payload', () => {
     // A sort key or an id is not shown, so it is not read
     expect(found.join(' ')).not.toContain('sort');
     expect(bannedIn('Scoring runs: 3rd of 30')).toEqual([]);
+  });
+
+  it('holds a claim\'s basis to the verdicts and the rendering leaks, not the jargon list (it is the breakdown)', () => {
+    const payload = { claim: { text: 'Power', basis: { because: [{ label: 'Percentile', value: 'null' }], unknown: ['He should be moved.'], wouldChange: [], lean: null, stamp: 'provisional' } } };
+    const found = bannedInPayload(payload).map((f) => f.path);
+    expect(found).toEqual(['$.claim.basis.because[0].value', '$.claim.basis.unknown[0]']);
+  });
+});
+
+describe('scoped jargon exceptions', () => {
+  const exceptions: JargonException[] = [
+    { surface: 'majorLeague.fortyMan', phrase: 'waiver priority', reason: 'OOTP\'s own name for the claim order.' },
+    { surface: 'catalog', phrase: 'Win Pct', reason: 'The standings column.' },
+  ];
+
+  it('allows the phrase on its surface and nowhere else, and still checks the rest of the string', () => {
+    expect(bannedIn('Third in waiver priority', [BANNED_VERDICTS], 'majorLeague.fortyMan', exceptions)).toEqual([]);
+    expect(bannedIn('Third in waiver priority', [BANNED_VERDICTS], 'majorLeague.lineup', exceptions).map(String)).toEqual([String(/\bpriority\b/i)]);
+    expect(bannedIn('Third in waiver priority', [BANNED_VERDICTS], undefined, exceptions)).toHaveLength(1);
+    expect(bannedIn('Waiver priority: you should claim him', [BANNED_VERDICTS], 'majorLeague.fortyMan', exceptions).map(String)).toEqual([String(/\bshould\b/i)]);
+    // Only the phrase as written, whole words: "priority" alone is still a verdict there
+    expect(bannedIn('A priority', [BANNED_VERDICTS], 'majorLeague.fortyMan', exceptions)).toHaveLength(1);
+  });
+
+  it('lets a surface\'s exception cover the surfaces under it, read from the payload\'s first field', () => {
+    const payload = { glossary: [{ display: 'Win Pct', text: 'Wins over games.' }], other: [{ display: 'Win Pct' }] };
+    expect(bannedInPayload(payload, 'catalog', exceptions)).toEqual([]);
+    expect(bannedInPayload(payload, 'league', exceptions).map((f) => f.path)).toEqual(['$.glossary[0].display', '$.other[0].display']);
+    expect(exceptionsUsed(payload, 'catalog', exceptions)).toEqual([exceptions[1]]);
+  });
+
+  it('gives every exception in force a surface, a phrase and a one-line reason', () => {
+    for (const e of JARGON_EXCEPTIONS) {
+      expect(e.surface).toMatch(/^[A-Za-z]+(\.[A-Za-z]+)*$/);
+      expect(e.phrase.trim()).toBe(e.phrase);
+      expect(e.phrase.length).toBeGreaterThan(1);
+      expect(e.reason).not.toMatch(/\n/);
+      expect(e.reason.length).toBeGreaterThan(10);
+      expect(e.reason.length).toBeLessThanOrEqual(140);
+    }
   });
 });

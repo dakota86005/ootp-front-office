@@ -10,9 +10,10 @@
  *
  * Three patterns are marginally narrower than a page's old copy, accepted at N2: "pays for talent" (the philosophy's
  * lean) is allowed, `\bOff Value\b` no longer matches "Off Values", and a doc id needs a word boundary ("AD-012" passes).
- * The list was tuned on Player Value's pages and now applies to every `/v2` string; before department copy moves (N8),
- * plain words it would reject ("Win Pct", "prior season", "waiver priority") need a scoped exception, not a weaker
- * pattern.
+ * The list was tuned on Player Value's pages and applies to every `/v2` string. A plain word it would reject on one
+ * surface ("PCT" in the standings column's glossary entry, "waiver priority" on the 40-man view) gets a scoped
+ * exception (`JARGON_EXCEPTIONS`: one phrase, one surface, one line saying why), never a weaker pattern: the phrase is
+ * allowed there and only there, and every other word of the same string is still checked.
  */
 
 /** Method words, internal names and rendering leaks. */
@@ -35,6 +36,9 @@ export const BANNED_JARGON: readonly RegExp[] = [
   /\bnull\b/i, /\bundefined\b/i, /\bNaN\b/i,
 ];
 
+/** The rendering leaks alone: what no string the app can show may carry, a breakdown's included. */
+export const RENDERING_LEAKS: readonly RegExp[] = [/\bnull\b/i, /\bundefined\b/i, /\bNaN\b/i];
+
 /**
  * Verdict words: the application describes and the GM decides (D-001), so no page tells him what to do or how a deal
  * came out. The union of the pages' lists (Contracts, Free Agents, the Trade Center, the trade reading). A word that is
@@ -50,9 +54,52 @@ export const BANNED_VERDICTS: readonly RegExp[] = [
   /\bmarket-dependent\b/i,
 ];
 
-/** The banned patterns a text contains (empty when it reads clean). */
-export function bannedIn(text: string, lists: ReadonlyArray<readonly RegExp[]> = [BANNED_JARGON]): RegExp[] {
-  return lists.flat().filter((pattern) => pattern.test(text));
+/**
+ * A phrase the list would reject that is plain on one surface. `surface` names where it may stand: a v2 payload's
+ * surface is `<root>.<first field>` (`catalog.glossary`, `catalog.stats`; `SURFACE_ROOTS` names each operation's root),
+ * and an exception for `catalog` covers every surface under it. The phrase matches whole words, ignoring case.
+ */
+export interface JargonException {
+  surface: string;
+  phrase: string;
+  /** One line: why this phrase is the plain word here. */
+  reason: string;
+}
+
+export const JARGON_EXCEPTIONS: readonly JargonException[] = [];
+
+/** The surface root of each `/v2` operation's payload (its operationId otherwise). */
+export const SURFACE_ROOTS: Readonly<Record<string, string>> = { getCatalog: 'catalog' };
+
+/** The surface a shown string sits on: the payload's root and the first field of its path (`catalog.glossary`). */
+export function surfaceOf(root: string, path: string): string {
+  const first = /^\$\.([A-Za-z0-9_]+)/.exec(path)?.[1];
+  return first ? `${root}.${first}` : root;
+}
+
+const covers = (exception: string, surface: string): boolean => surface === exception || surface.startsWith(`${exception}.`);
+
+const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The text with the phrases excepted on this surface taken out, so the rest of it is still checked. */
+export function withoutExceptions(text: string, surface: string | undefined, exceptions: readonly JargonException[] = JARGON_EXCEPTIONS): string {
+  if (!surface) return text;
+  let out = text;
+  for (const e of exceptions) {
+    if (covers(e.surface, surface)) out = out.replace(new RegExp(`(?<![\\w-])${escape(e.phrase)}(?![\\w-])`, 'gi'), ' ');
+  }
+  return out;
+}
+
+/** The banned patterns a text contains (empty when it reads clean); on a named surface, its exceptions are allowed. */
+export function bannedIn(
+  text: string,
+  lists: ReadonlyArray<readonly RegExp[]> = [BANNED_JARGON],
+  surface?: string,
+  exceptions: readonly JargonException[] = JARGON_EXCEPTIONS,
+): RegExp[] {
+  const checked = withoutExceptions(text, surface, exceptions);
+  return lists.flat().filter((pattern) => pattern.test(checked));
 }
 
 /** The fields of a `/api/v2` payload the Mac app shows as text (a `Claim`'s line and help tag, a value's or cell's display). */
@@ -76,9 +123,56 @@ export function shownStrings(payload: unknown): Array<{ path: string; text: stri
   return found;
 }
 
-/** Each shown string in a payload that carries a banned word or verdict, with the pattern it matched. */
-export function bannedInPayload(payload: unknown): Array<{ path: string; text: string; pattern: string }> {
-  return shownStrings(payload).flatMap(({ path, text }) =>
-    bannedIn(text, [BANNED_JARGON, BANNED_VERDICTS]).map((pattern) => ({ path, text, pattern: String(pattern) })),
+/**
+ * Every sentence of a claim's basis (its evidence lines, "not known", "would change if" and the lean), with where it
+ * sits. The basis is the breakdown, where a method word may help, so it is held to the verdicts and the rendering
+ * leaks, not the jargon list (AGENTS.md "Writing for the GM").
+ */
+export function basisStrings(payload: unknown): Array<{ path: string; text: string }> {
+  const found: Array<{ path: string; text: string }> = [];
+  const collect = (node: unknown, path: string): void => {
+    if (typeof node === 'string') found.push({ path, text: node });
+    else if (Array.isArray(node)) node.forEach((item, i) => collect(item, `${path}[${i}]`));
+    else if (node && typeof node === 'object') for (const [k, v] of Object.entries(node)) collect(v, `${path}.${k}`);
+  };
+  const walk = (node: unknown, path: string): void => {
+    if (Array.isArray(node)) node.forEach((item, i) => walk(item, `${path}[${i}]`));
+    else if (node && typeof node === 'object') {
+      for (const [key, value] of Object.entries(node)) {
+        if (key === 'basis' && value && typeof value === 'object') {
+          const b = value as Record<string, unknown>;
+          for (const field of ['because', 'unknown', 'wouldChange', 'lean']) collect(b[field], `${path}.basis.${field}`);
+        } else walk(value, `${path}.${key}`);
+      }
+    }
+  };
+  walk(payload, '$');
+  return found;
+}
+
+/**
+ * Each shown string in a payload that carries a banned word or verdict, with the pattern it matched. With a surface
+ * root (`catalog`), each string's surface is `surfaceOf(root, path)` and that surface's exceptions are allowed.
+ */
+export function bannedInPayload(
+  payload: unknown,
+  root?: string,
+  exceptions: readonly JargonException[] = JARGON_EXCEPTIONS,
+): Array<{ path: string; text: string; pattern: string }> {
+  const shown = shownStrings(payload).flatMap(({ path, text }) =>
+    bannedIn(text, [BANNED_JARGON, BANNED_VERDICTS], root ? surfaceOf(root, path) : undefined, exceptions)
+      .map((pattern) => ({ path, text, pattern: String(pattern) })),
+  );
+  const basis = basisStrings(payload).flatMap(({ path, text }) =>
+    bannedIn(text, [BANNED_VERDICTS, RENDERING_LEAKS]).map((pattern) => ({ path, text, pattern: String(pattern) })),
+  );
+  return [...shown, ...basis];
+}
+
+/** The exceptions a payload actually leans on (a phrase present on a surface it covers), so a stale one can be found. */
+export function exceptionsUsed(payload: unknown, root: string, exceptions: readonly JargonException[] = JARGON_EXCEPTIONS): JargonException[] {
+  const strings = shownStrings(payload);
+  return exceptions.filter((e) =>
+    strings.some(({ path, text }) => covers(e.surface, surfaceOf(root, path)) && withoutExceptions(text, surfaceOf(root, path), [e]) !== text),
   );
 }
