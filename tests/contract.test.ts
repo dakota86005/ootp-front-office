@@ -408,11 +408,20 @@ describe('the server answers in the contract\'s shape (the synthetic save)', () 
     const previous = loadConfig();
     saveConfig({ csvDir: pretendExport(), saveName: 'Test League' });
     try {
-      for (const [operationId, route, type] of [['getStatus', '/api/status', 'ServerStatus'], ['getDataStatus', '/api/data-status', 'DataStatus']]) {
+      for (const [operationId, route, type] of [
+        ['getStatus', '/api/status', 'ServerStatus'], ['getDataStatus', '/api/data-status', 'DataStatus'],
+        ['getDataStatusWords', '/api/v2/data-status', 'DataStatusView'],
+      ]) {
         const res = await fetch(`${base}${route}`);
         expect(res.status).toBe(200);
         const body = await res.json();
-        expect(body.configured, operationId).toBe(true);
+        if (operationId === 'getDataStatusWords') {
+          expect(bannedInPayload(body, operationId)).toEqual([]);
+          // The export's time is the pretend folder's, written in the host's zone: the fixture keeps a fixed one
+          for (const row of body.facts) if (row.id === 'exported' && row.sort.value) row.cells.value.display = row.sort.value = 'Jul 1, 2040, 12:00 PM';
+        } else {
+          expect(body.configured, operationId).toBe(true);
+        }
         const validate = validator(type);
         expect(validate(body) ? [] : validate.errors, operationId).toEqual([]);
         // The logo cache's token changes with the export folder's time; the fixture keeps a fixed one
