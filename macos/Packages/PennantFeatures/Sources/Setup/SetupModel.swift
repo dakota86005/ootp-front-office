@@ -93,7 +93,8 @@ public final class SetupModel {
     }
 
     private func undocumented(_ code: Int, _ what: String, body: HTTPBody? = nil) async -> RequestProblem {
-        let problem = await RequestProblem.undocumented(code, body: body, operation: what)
+        // Setup's requests are all reused routes: an undocumented answer's text is never shown as the server's sentence
+        let problem = await RequestProblem.undocumented(code, body: body, operation: what, fromV2: false)
         if let detail = problem.detail { log("setup: \(detail)") }
         return problem
     }

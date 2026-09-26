@@ -258,7 +258,7 @@ struct GeneralSettings: View {
             case .badRequest(let refused):
                 saveFolderProblem = .served(try refused.body.json.error)
             case .undocumented(let code, let payload):
-                saveFolderProblem = await .undocumented(code, body: payload.body, operation: "setSaveSource")
+                saveFolderProblem = await .undocumented(code, body: payload.body, operation: "setSaveSource", fromV2: false)
             }
         } catch {
             let problem = RequestProblem.from(error)

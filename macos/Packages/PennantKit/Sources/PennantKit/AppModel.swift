@@ -227,7 +227,7 @@ public final class AppModel {
             case .conflict(let refused):
                 return .served(try refused.body.json.error)
             case .undocumented(let code, let payload):
-                return await .undocumented(code, body: payload.body, operation: "startImport")
+                return await .undocumented(code, body: payload.body, operation: "startImport", fromV2: false)
             }
         } catch {
             return .from(error)
