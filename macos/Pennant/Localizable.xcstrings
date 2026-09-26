@@ -13,6 +13,9 @@
     "Affiliates": {
       "extractionState": "manual"
     },
+    "An import is running. Choose a save when it has finished.": {
+      "extractionState": "manual"
+    },
     "Appearance": {
       "extractionState": "manual"
     },
@@ -62,6 +65,9 @@
     "Contracts": {
       "extractionState": "manual"
     },
+    "Couldn't reach the Pennant server": {
+      "extractionState": "manual"
+    },
     "Dark": {
       "extractionState": "manual"
     },
@@ -81,10 +87,16 @@
     "Development Tracking": {
       "extractionState": "manual"
     },
+    "Dismiss": {
+      "extractionState": "manual"
+    },
     "Draft Board": {
       "extractionState": "manual"
     },
     "Evidence": {
+      "extractionState": "manual"
+    },
+    "Export": {
       "extractionState": "manual"
     },
     "Export files": {
@@ -190,6 +202,9 @@
     "Lineup": {
       "extractionState": "manual"
     },
+    "Location": {
+      "extractionState": "manual"
+    },
     "Major League Ops": {
       "extractionState": "manual"
     },
@@ -200,6 +215,9 @@
       "extractionState": "manual"
     },
     "Morning Report": {
+      "extractionState": "manual"
+    },
+    "Name": {
       "extractionState": "manual"
     },
     "No data folder chosen for this development build": {},
@@ -227,6 +245,9 @@
     "Nothing selected": {
       "extractionState": "manual"
     },
+    "OOTP save": {
+      "extractionState": "manual"
+    },
     "Or choose a folder": {
       "extractionState": "manual"
     },
@@ -243,6 +264,12 @@
       "extractionState": "manual"
     },
     "Pennant": {
+      "extractionState": "manual"
+    },
+    "Pennant reads the save's export each time it imports.": {
+      "extractionState": "manual"
+    },
+    "Pennant reads the transaction log from the save's folder, which it finds from the export. Name the folder here only if it isn't found.": {
       "extractionState": "manual"
     },
     "Pennant stops its server, puts back the files it copied before it first ran on this folder, and starts again. The files it replaces are kept in the backups folder.": {
@@ -342,6 +369,9 @@
     "Standings": {
       "extractionState": "manual"
     },
+    "Started": {
+      "extractionState": "manual"
+    },
     "Starting…": {},
     "Stopping…": {},
     "Storylines": {
@@ -350,9 +380,27 @@
     "System": {
       "extractionState": "manual"
     },
+    "The Pennant server isn't running": {
+      "extractionState": "manual"
+    },
+    "The backup could not be restored": {
+      "extractionState": "manual"
+    },
     "The data folder could not be backed up": {},
     "The data folder is in use": {},
+    "The import did not finish": {
+      "extractionState": "manual"
+    },
     "The import did not start": {
+      "extractionState": "manual"
+    },
+    "The request failed": {
+      "extractionState": "manual"
+    },
+    "The save's folder, ending in .lg": {
+      "extractionState": "manual"
+    },
+    "The save's folder, or the folder that holds your saves": {
       "extractionState": "manual"
     },
     "The server could not be started": {},

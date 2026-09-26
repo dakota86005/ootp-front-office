@@ -41,28 +41,76 @@ describe('the Mac app\'s String Catalogs', () => {
 
 /**
  * The structural labels the Swift sources write, the way SwiftUI looks them up: a string literal given to `Text`,
- * `Button`, `Label`, `Section` and the other labelled views, a `title:`, a `LocalizedStringResource`, either side of a
- * ternary, or a `case` returning a label. `Text(verbatim:)` (served text) is not one; SF Symbol names are skipped.
+ * `Button`, `Label`, `Section`, `Menu` and the other labelled views, to `.navigationTitle`, `.navigationSubtitle`,
+ * `.help`, `.alert` and `.confirmationDialog`, a `prompt:`, a `title:`, a `LocalizedStringResource` or
+ * `LocalizedStringKey`, either side of a ternary, or a `case` returning a label. `Text(verbatim:)` is served text and is
+ * not one (see `verbatimLiterals`); SF Symbol names are skipped.
  */
 function structuralLiterals(source: string): string[] {
   const code = source.replace(/\/\/[^\n]*/g, '');
   const lit = '"((?:[^"\\\\\\n]|\\\\.)*)"';
+  const views = [
+    'Text', 'Button', 'Label', 'Section', 'LabeledContent', 'Tab', 'CommandMenu', 'CommandGroup', 'Window', 'Picker',
+    'TextField', 'SecureField', 'Toggle', 'Menu', 'ControlGroup', 'ContentUnavailableView', 'confirmationDialog', 'alert',
+    'navigationTitle', 'navigationSubtitle', 'help', 'item', 'row',
+  ].join('|');
   const patterns = [
-    new RegExp(`\\b(?:Text|Button|Label|Section|LabeledContent|Tab|CommandMenu|Window|Picker|TextField|Toggle|ContentUnavailableView|confirmationDialog|item|row)\\(\\s*${lit}`, 'g'),
-    new RegExp(`\\btitle: ${lit}`, 'g'),
-    new RegExp(`LocalizedStringResource = ${lit}`, 'g'),
+    new RegExp(`\\b(?:${views})\\(\\s*${lit}`, 'g'),
+    new RegExp(`\\b(?:title|prompt): ${lit}`, 'g'),
+    new RegExp(`(?:LocalizedStringResource|LocalizedStringKey) = ${lit}`, 'g'),
     new RegExp(`\\? ${lit} : ${lit}`, 'g'),
     new RegExp(`\\bcase [^\\n"]*: ${lit}`, 'g'),
   ];
-  const symbol = /^[a-z0-9]+(\.[a-z0-9]+)+$/;
+  const symbol = /^[a-z0-9]+(\.[a-z0-9]+)+$|^[a-z]+$/;
   const found = new Set<string>();
   for (const pattern of patterns) {
     for (const match of code.matchAll(pattern)) {
-      for (const text of match.slice(1)) if (text && !symbol.test(text)) found.add(text);
+      for (const text of match.slice(1)) if (text !== undefined && !symbol.test(text)) found.add(text);
     }
   }
   return [...found];
 }
+
+/**
+ * `Text(verbatim:)` given a literal with words in it: `verbatim` is only for served values (a literal that is nothing
+ * but an interpolation of one is allowed); a label written in Swift belongs in the catalog.
+ */
+function verbatimLiterals(source: string): string[] {
+  const code = source.replace(/\/\/[^\n]*/g, '');
+  return [...code.matchAll(/\bverbatim: "((?:[^"\\\n]|\\.)*)"/g)]
+    .map((m) => m[1])
+    .filter((text) => text.replace(/\\\((?:[^()]|\([^()]*\))*\)/g, '').trim() !== '');
+}
+
+describe('finding the Swift sources\' labels', () => {
+  it.each([
+    ['a Text', 'Text("Evidence")', 'Evidence'],
+    ['a Button', 'Button("Try Again") {}', 'Try Again'],
+    ['a Menu', 'Menu("Sort By") {}', 'Sort By'],
+    ['a navigation title', '.navigationTitle("Front Office")', 'Front Office'],
+    ['a navigation subtitle', '.navigationSubtitle("Today")', 'Today'],
+    ['a help tag', '.help("Back")', 'Back'],
+    ['an alert', '.alert("Restore the backup?", isPresented: $shown) {}', 'Restore the backup?'],
+    ['a prompt', 'TextField(text: $path, prompt: "Folder path")', 'Folder path'],
+    ['a LocalizedStringKey', 'let title: LocalizedStringKey = "Starting…"', 'Starting…'],
+    ['a LocalizedStringResource', 'static let title: LocalizedStringResource = "Scouting"', 'Scouting'],
+    ['a ternary', 'shown ? "Hide Inspector" : "Show Inspector"', 'Show Inspector'],
+    ['a case', 'case .ready: "Ready"', 'Ready'],
+  ])('finds %s', (_what, source, label) => {
+    expect(structuralLiterals(source)).toContain(label);
+  });
+
+  it('skips served text and SF Symbol names', () => {
+    expect(structuralLiterals('Text(verbatim: status.headline)')).toEqual([]);
+    expect(structuralLiterals('Label("Back", systemImage: "chevron.backward")')).toEqual(['Back']);
+  });
+
+  it('flags a verbatim literal with words, and passes a verbatim served value', () => {
+    expect(verbatimLiterals('Text(verbatim: "…/Your Save.lg")')).toEqual(['…/Your Save.lg']);
+    expect(verbatimLiterals('Text(verbatim: "\\(save.csvCount)")')).toEqual([]);
+    expect(verbatimLiterals('Text(verbatim: save.name)')).toEqual([]);
+  });
+});
 
 describe('the Mac app\'s structural labels', () => {
   const sources = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', 'macos'], { encoding: 'utf8' })
@@ -78,5 +126,9 @@ describe('the Mac app\'s structural labels', () => {
   it.each(sources)('%s: every label is in the app\'s String Catalog', (file) => {
     const missing = structuralLiterals(fs.readFileSync(file, 'utf8')).filter((text) => !keys.has(text));
     expect(missing).toEqual([]);
+  });
+
+  it.each(sources)('%s: Text(verbatim:) only for served values', (file) => {
+    expect(verbatimLiterals(fs.readFileSync(file, 'utf8'))).toEqual([]);
   });
 });
