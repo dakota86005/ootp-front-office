@@ -68,28 +68,67 @@ describe('each club\'s palette, as the Mac app is served it', () => {
   });
 });
 
-describe('the departments and their heads, from the save\'s staff', () => {
+describe('the departments and their heads, from the save\'s staff table (review S6)', () => {
+  const STAFF = 'team_id INTEGER, manager INTEGER, general_manager INTEGER, pitching_coach INTEGER, hitting_coach INTEGER, bench_coach INTEGER, head_scout INTEGER, doctor INTEGER';
+  const withStaff = (row: Record<string, number>, run: () => void, ddl = STAFF) => {
+    db.exec(`CREATE TABLE team_roster_staff (${ddl})`);
+    const cols = Object.keys(row);
+    db.prepare(`INSERT INTO team_roster_staff (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...cols.map((c) => row[c]));
+    try {
+      run();
+    } finally {
+      db.exec('DROP TABLE team_roster_staff');
+    }
+  };
+  const head = (id: string) => servedDepartments(IDS.mlbTeam).find((d) => d.id === id)!;
+
   it('lists the nine departments in the sidebar\'s order, with the Mac app\'s ids', () => {
     expect(servedDepartments(IDS.mlbTeam).map((d) => d.id)).toEqual([
       'frontOffice', 'majorLeague', 'farm', 'scouting', 'trades', 'finance', 'medical', 'league', 'philosophy',
     ]);
   });
 
-  it('names the person in a seat the save fills, with the seat in words', () => {
-    const departments = servedDepartments(IDS.mlbTeam);
-    const front = departments.find((d) => d.id === 'frontOffice')!;
-    expect(front.head).toEqual({ name: 'Web Ivey', role: 'general manager', coachId: 901 });
-    expect(front.preparedBy.display).toBe('Prepared by Web Ivey, general manager');
-    expect(departments.find((d) => d.id === 'trades')!.head).toMatchObject({ name: 'Del Faraday', role: 'assistant general manager' });
+  it('names the person in each seat the staff table fills, under the staff page\'s own name for the seat', () => {
+    // The fixture's coaches: 900 Skip Ratchet, 901 Web Ivey, 902 Del Faraday
+    withStaff({ team_id: IDS.mlbTeam, general_manager: 901, bench_coach: 900, head_scout: 902, doctor: 900 }, () => {
+      expect(head('frontOffice').head).toEqual({ name: 'Web Ivey', role: 'General Manager', coachId: 901 });
+      expect(head('frontOffice').preparedBy.display).toBe('Prepared by Web Ivey, general manager');
+      expect(head('majorLeague').head).toMatchObject({ name: 'Skip Ratchet', role: 'Bench Coach' });
+      expect(head('scouting').head).toMatchObject({ name: 'Del Faraday', role: 'Head Scout' });
+      expect(head('medical').head).toMatchObject({ name: 'Skip Ratchet', role: 'Team Doctor' });
+      expect(head('medical').preparedBy.display).toBe('Prepared by Skip Ratchet, team doctor');
+    });
   });
 
-  it('says a seat the save leaves empty is empty, and never makes up a name', () => {
-    const medical = servedDepartments(IDS.mlbTeam).find((d) => d.id === 'medical')!;
-    expect(medical.head).toBeNull();
-    expect(medical.preparedBy).toMatchObject({ display: 'Prepared by the medical staff', tone: 'unknown' });
-    expect(medical.preparedBy.hint).toMatch(/names no head trainer/);
-    // With no club known at all, nobody is named anywhere
+  it('says a seat the staff table leaves empty is empty, and never names anyone', () => {
+    withStaff({ team_id: IDS.mlbTeam, general_manager: 901, bench_coach: 0, head_scout: 0, doctor: 424242 }, () => {
+      for (const id of ['majorLeague', 'scouting', 'medical']) {
+        expect(head(id).head, id).toBeNull();
+        expect(head(id).preparedBy.tone).toBe('unknown');
+        expect(head(id).preparedBy.hint).toMatch(/The save's staff has no .+ for this club/);
+      }
+    });
+  });
+
+  it('says nothing is known when the export has no staff table, no such seat, or no row for the club', () => {
+    // No table (the fixture has none)
+    for (const id of ['frontOffice', 'majorLeague', 'scouting', 'medical']) {
+      expect(head(id).head).toBeNull();
+      expect(head(id).preparedBy.hint).toBe('The export does not include the club\'s staff');
+    }
+    // A table without the doctor's seat, and a table with no row for this club
+    withStaff({ team_id: IDS.mlbTeam, general_manager: 901 }, () => {
+      expect(head('frontOffice').head).toMatchObject({ name: 'Web Ivey' });
+      expect(head('medical').preparedBy.hint).toBe('The export does not include the club\'s staff');
+    }, 'team_id INTEGER, general_manager INTEGER');
+    withStaff({ team_id: 999_999, general_manager: 901 }, () => {
+      expect(head('frontOffice').head).toBeNull();
+    });
+  });
+
+  it('names nobody when no club is known, and never a head for a department with no one seat', () => {
     expect(servedDepartments(null).every((d) => d.head === null)).toBe(true);
+    for (const id of ['farm', 'trades', 'finance', 'league', 'philosophy']) expect(head(id).head).toBeNull();
   });
 });
 
@@ -103,10 +142,15 @@ describe('each club\'s record and logo', () => {
   });
 
   it('writes the record as the export has it, and says so when the export has none', () => {
-    const catalog = buildCatalog(majorLeagueClubs(), IDS.mlbTeam);
-    const ours = catalog.clubs.find((c) => c.teamId === IDS.mlbTeam)!;
-    const row = db.prepare('SELECT w, l FROM team_record WHERE team_id = ?').get(IDS.mlbTeam) as { w: number; l: number } | undefined;
-    if (row) expect(ours.record.display).toBe(`${row.w}–${row.l}`);
+    // The fixture's standings table has no row for the club: write one, as an export would
+    db.prepare('DELETE FROM team_record WHERE team_id = ?').run(IDS.mlbTeam);
+    db.prepare('INSERT INTO team_record (team_id, g, w, l, pos, gb) VALUES (?, 83, 45, 38, 2, 3)').run(IDS.mlbTeam);
+    try {
+      const ours = buildCatalog(majorLeagueClubs(), IDS.mlbTeam).clubs.find((c) => c.teamId === IDS.mlbTeam)!;
+      expect(ours.record).toEqual({ display: '45–38', hint: '45 wins, 38 losses, 2nd in the division, 3 games back' });
+    } finally {
+      db.prepare('DELETE FROM team_record WHERE team_id = ?').run(IDS.mlbTeam);
+    }
     db.exec('ALTER TABLE team_record RENAME TO zz_team_record');
     try {
       const without = buildCatalog(majorLeagueClubs(), IDS.mlbTeam).clubs.find((c) => c.teamId === IDS.mlbTeam)!;

@@ -6,6 +6,7 @@ import { leagueRulesForOrganization } from './leagueRules.js';
 import { rightsFor } from './playerContext.js';
 import { rosterCounts } from './playerRights.js';
 import { organizationPlayerStates } from './playerState.js';
+import { STAFF_ROLE_LABELS } from './staff.js';
 import { answer, refuse, type Computed } from './computed.js';
 
 export const rosterOpsRoutes = Router();
@@ -240,10 +241,8 @@ const COACH_FIELDS: Record<string, Array<[string, string]>> = {
     ['prevent_arms', 'Prevent Arm Inj.'], ['prevent_legs', 'Prevent Leg Inj.'],
   ],
 };
-const ROLE_LABELS: Record<string, string> = {
-  manager: 'Manager', general_manager: 'General Manager', pitching_coach: 'Pitching Coach',
-  hitting_coach: 'Hitting Coach', bench_coach: 'Bench Coach', head_scout: 'Head Scout', doctor: 'Team Doctor',
-};
+/** The seats the staff page lists, in the save's staff table's own names (`staff.ts`, shared with the Mac app's heads). */
+const ROLE_LABELS = STAFF_ROLE_LABELS;
 
 rosterOpsRoutes.get('/staff/:orgId', (req, res) => {
   const orgId = Number(req.params.orgId);

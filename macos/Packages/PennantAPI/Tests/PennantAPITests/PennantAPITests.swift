@@ -212,7 +212,10 @@ struct PennantAPITests {
         #expect(club.record.display == "15–15")
         #expect(club.logo == nil)
         #expect(catalog.departments.map(\.id.value1) == [.frontOffice, .majorLeague, .farm, .scouting, .trades, .finance, .medical, .league, .philosophy])
-        #expect(catalog.departments.allSatisfy { $0.head == nil })
+        let medical = try #require(catalog.departments.first { $0.id.value1 == .medical })
+        #expect(medical.head?.role == "Team Doctor")
+        #expect(medical.preparedBy.display.hasPrefix("Prepared by "))
+        #expect(catalog.departments.first { $0.id.value1 == .farm }?.head == nil)
         #expect(catalog.phrases.missingValue.display == "Not known yet")
     }
 

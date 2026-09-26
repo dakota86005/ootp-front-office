@@ -1290,7 +1290,7 @@
           },
           "role": {
             "type": "string",
-            "description": "The seat, in words (\"bench coach\")."
+            "description": "The seat, as the save's staff page names it (\"Bench Coach\", \"Team Doctor\")."
           },
           "coachId": {
             "$ref": "#/components/schemas/Integer"

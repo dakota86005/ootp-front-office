@@ -1185,21 +1185,27 @@
     {
       "id": "frontOffice",
       "name": "Front Office",
-      "head": null,
+      "head": {
+        "name": "Morgan Brock",
+        "role": "General Manager",
+        "coachId": 5010
+      },
       "preparedBy": {
-        "display": "Prepared by the front office",
-        "tone": "unknown",
-        "hint": "The save names no general manager for this club"
+        "display": "Prepared by Morgan Brock, general manager",
+        "hint": "From the club's staff in the save"
       }
     },
     {
       "id": "majorLeague",
       "name": "Major League Ops",
-      "head": null,
+      "head": {
+        "name": "Rafael Dunn",
+        "role": "Bench Coach",
+        "coachId": 5012
+      },
       "preparedBy": {
-        "display": "Prepared by the major league staff",
-        "tone": "unknown",
-        "hint": "The save names no bench coach for this club"
+        "display": "Prepared by Rafael Dunn, bench coach",
+        "hint": "From the club's staff in the save"
       }
     },
     {
@@ -1213,11 +1219,14 @@
     {
       "id": "scouting",
       "name": "Scouting",
-      "head": null,
+      "head": {
+        "name": "Terry Ellis",
+        "role": "Head Scout",
+        "coachId": 5013
+      },
       "preparedBy": {
-        "display": "Prepared by the scouting staff",
-        "tone": "unknown",
-        "hint": "The save names no head scout for this club"
+        "display": "Prepared by Terry Ellis, head scout",
+        "hint": "From the club's staff in the save"
       }
     },
     {
@@ -1225,9 +1234,7 @@
       "name": "Trades",
       "head": null,
       "preparedBy": {
-        "display": "Prepared by the front office",
-        "tone": "unknown",
-        "hint": "The save names no assistant general manager for this club"
+        "display": "Prepared by the front office"
       }
     },
     {
@@ -1241,11 +1248,14 @@
     {
       "id": "medical",
       "name": "Medical",
-      "head": null,
+      "head": {
+        "name": "Ana Frey",
+        "role": "Team Doctor",
+        "coachId": 5014
+      },
       "preparedBy": {
-        "display": "Prepared by the medical staff",
-        "tone": "unknown",
-        "hint": "The save names no head trainer for this club"
+        "display": "Prepared by Ana Frey, team doctor",
+        "hint": "From the club's staff in the save"
       }
     },
     {

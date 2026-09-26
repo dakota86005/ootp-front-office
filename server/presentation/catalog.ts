@@ -10,7 +10,7 @@ import type { Cell, DeptId } from '../contract/presentation.js';
 import type { Integer } from '../contract/primitives.js';
 import { clubRecord } from '../league.js';
 import { logoReference } from '../logos.js';
-import { seatHolder, type HeadSeat } from '../staff.js';
+import { seatHolder, type StaffSeat } from '../staff.js';
 import { cell } from './claim.js';
 import { REACT_ONLY_TERMS, glossaryTable } from './glossary.js';
 import { clubPalette, type ClubPalette, type TeamColors } from './palette.js';
@@ -67,7 +67,7 @@ export interface CatalogClub {
 /** Who heads a department, as the save's staff has it. */
 export interface DepartmentHead {
   name: string;
-  /** The seat, in words ("bench coach"). */
+  /** The seat, as the save's staff page names it ("Bench Coach", "Team Doctor"). */
   role: string;
   coachId: Integer;
 }
@@ -94,15 +94,19 @@ export interface Catalog {
   phrases: CatalogPhrases;
 }
 
-/** The departments in the sidebar's order, and the seat each head sits in (null: the department has no one seat). */
-const DEPARTMENTS: ReadonlyArray<{ id: DeptId; name: string; seat: { seat: HeadSeat; role: string } | null; office: string }> = [
-  { id: 'frontOffice', name: 'Front Office', seat: { seat: 'generalManager', role: 'general manager' }, office: 'the front office' },
-  { id: 'majorLeague', name: 'Major League Ops', seat: { seat: 'benchCoach', role: 'bench coach' }, office: 'the major league staff' },
+/**
+ * The departments in the sidebar's order, and the seat of the club's staff table each head sits in (null: the table has
+ * no one seat for the department). The seats and their names are the save's own, as the staff page shows them
+ * (`STAFF_ROLE_LABELS`); a provisional owner call, SWIFTUI_REBUILD.md section 3.5.
+ */
+const DEPARTMENTS: ReadonlyArray<{ id: DeptId; name: string; seat: StaffSeat | null; office: string }> = [
+  { id: 'frontOffice', name: 'Front Office', seat: 'general_manager', office: 'the front office' },
+  { id: 'majorLeague', name: 'Major League Ops', seat: 'bench_coach', office: 'the major league staff' },
   { id: 'farm', name: 'Farm & Development', seat: null, office: 'the minor league staff' },
-  { id: 'scouting', name: 'Scouting', seat: { seat: 'headScout', role: 'head scout' }, office: 'the scouting staff' },
-  { id: 'trades', name: 'Trades', seat: { seat: 'assistantGm', role: 'assistant general manager' }, office: 'the front office' },
+  { id: 'scouting', name: 'Scouting', seat: 'head_scout', office: 'the scouting staff' },
+  { id: 'trades', name: 'Trades', seat: null, office: 'the front office' },
   { id: 'finance', name: 'Finance', seat: null, office: 'the front office' },
-  { id: 'medical', name: 'Medical', seat: { seat: 'headTrainer', role: 'head trainer' }, office: 'the medical staff' },
+  { id: 'medical', name: 'Medical', seat: 'doctor', office: 'the medical staff' },
   { id: 'league', name: 'League Office', seat: null, office: 'the front office' },
   { id: 'philosophy', name: 'Philosophy & Staff', seat: null, office: 'the front office' },
 ];
@@ -164,22 +168,21 @@ export function servedClub(club: ClubSource): CatalogClub {
 /** Each department with its head, for the organization the app is about (null: no club is known yet). */
 export function servedDepartments(orgId: number | null): CatalogDepartment[] {
   return DEPARTMENTS.map((d) => {
-    if (!d.seat) return { id: d.id, name: d.name, head: null, preparedBy: cell(`Prepared by ${d.office}`) };
-    const holder = orgId === null ? null : seatHolder(orgId, d.seat.seat);
-    if (!holder) {
+    const base = { id: d.id, name: d.name };
+    if (!d.seat) return { ...base, head: null, preparedBy: cell(`Prepared by ${d.office}`) };
+    const reading = orgId === null ? null : seatHolder(orgId, d.seat);
+    if (reading?.status === 'filled') {
       return {
-        id: d.id,
-        name: d.name,
-        head: null,
-        preparedBy: cell(`Prepared by ${d.office}`, { tone: 'unknown', hint: `The save names no ${d.seat.role} for this club` }),
+        ...base,
+        head: { name: reading.name, role: reading.role, coachId: reading.coachId },
+        preparedBy: cell(`Prepared by ${reading.name}, ${reading.role.toLowerCase()}`, { hint: 'From the club\'s staff in the save' }),
       };
     }
-    return {
-      id: d.id,
-      name: d.name,
-      head: { name: holder.name, role: d.seat.role, coachId: holder.coachId },
-      preparedBy: cell(`Prepared by ${holder.name}, ${d.seat.role}`, { hint: 'From the club\'s staff in the save' }),
-    };
+    const role = (reading?.role ?? d.seat).toLowerCase();
+    const hint = reading?.status === 'empty'
+      ? `The save's staff has no ${role} for this club`
+      : 'The export does not include the club\'s staff';
+    return { ...base, head: null, preparedBy: cell(`Prepared by ${d.office}`, { tone: 'unknown', hint }) };
   });
 }
 
