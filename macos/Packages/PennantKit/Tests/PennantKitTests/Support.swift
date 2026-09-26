@@ -199,20 +199,34 @@ final class RoutedTransport: ClientTransport, @unchecked Sendable {
     private let lock = NSLock()
     private var _paths: [String] = []
     private let answers: [String: (contentType: String, body: Data)]
+    private let statuses: [String: Int]
+    private var _bodies: [String: Data] = [:]
 
-    init(_ answers: [String: (contentType: String, body: Data)]) {
+    /// `answers` and `statuses` are keyed by path, or by `METHOD path` (`POST /api/settings`), which wins; a missing
+    /// status is 200.
+    init(_ answers: [String: (contentType: String, body: Data)], statuses: [String: Int] = [:]) {
         self.answers = answers
+        self.statuses = statuses
     }
+
+    /// The last body sent to a `METHOD path`.
+    func body(_ key: String) -> Data? { lock.withLock { _bodies[key] } }
 
     var paths: [String] { lock.withLock { _paths } }
 
-    func send(_ request: HTTPRequest, body _: HTTPBody?, baseURL _: URL, operationID _: String) async throws
+    func send(_ request: HTTPRequest, body: HTTPBody?, baseURL _: URL, operationID _: String) async throws
         -> (HTTPResponse, HTTPBody?)
     {
         let path = request.path ?? ""
-        lock.withLock { _paths.append(path) }
-        guard let answer = answers[path] else { return (HTTPResponse(status: .notFound), nil) }
-        var response = HTTPResponse(status: .ok)
+        let keyed = "\(request.method.rawValue) \(path)"
+        var sent: Data?
+        if let body { sent = try await Data(collecting: body, upTo: 1 << 20) }
+        lock.withLock {
+            _paths.append(path)
+            if let sent { _bodies[keyed] = sent }
+        }
+        guard let answer = answers[keyed] ?? answers[path] else { return (HTTPResponse(status: .notFound), nil) }
+        var response = HTTPResponse(status: .init(code: statuses[keyed] ?? statuses[path] ?? 200))
         response.headerFields[.contentType] = answer.contentType
         return (response, HTTPBody(answer.body))
     }

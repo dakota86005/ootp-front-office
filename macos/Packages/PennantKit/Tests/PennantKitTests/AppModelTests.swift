@@ -181,6 +181,96 @@ struct CurrentClubTests {
     }
 }
 
+/// Asking the server to do something: an import (Club ▸ Refresh Data, Settings ▸ Import Now) and saving the settings
+/// (Setup's club, the appearance).
+@Suite("The app model's requests")
+@MainActor
+struct AppModelRequestTests {
+    private func model(_ transport: RoutedTransport) throws -> AppModel {
+        let configuration = try fakeConfiguration()
+        let status = try fixtureStatus()
+        let controller = ServerController(
+            configuration: configuration, launcher: FakeLauncher { process, _ in process.ready() }, keySource: NoKeys(),
+            probe: { _, _ in status }, timing: fastTiming
+        )
+        return AppModel(configuration: configuration, controller: controller) { connection in
+            PennantClient.make(port: connection.port, token: connection.token, transport: transport)
+        }
+    }
+
+    private func answers(_ extra: [String: (contentType: String, body: Data)]) throws -> [String: (contentType: String, body: Data)] {
+        try [
+            "/api/status": RoutedTransport.json("getStatus"),
+            "/api/settings": RoutedTransport.json("getSettings"),
+            "/api/orgs": RoutedTransport.json("listOrgs"),
+            "/api/data-status": RoutedTransport.json("getDataStatus"),
+        ].merging(extra) { $1 }
+    }
+
+    @Test("a refused import returns the server's own sentence; nothing is asked before the server is up")
+    func importRefused() async throws {
+        let transport = RoutedTransport(
+            try answers(["POST /api/import": RoutedTransport.json("startImport-no-save")]),
+            statuses: ["POST /api/import": 400]
+        )
+        let model = try model(transport)
+        #expect(await model.startImport() == nil)
+        #expect(!transport.paths.contains("/api/import"))
+        await model.start()
+        #expect(await eventually { model.settings != nil })
+        #expect(await model.startImport() == "No save configured")
+        await model.shutdown()
+    }
+
+    @Test("an accepted import marks the status as importing until the events say otherwise")
+    func importAccepted() async throws {
+        let transport = RoutedTransport(try answers([
+            "POST /api/import": ("application/json", Data(#"{"ok":true,"lastImport":null,"lastError":null}"#.utf8)),
+        ]))
+        let model = try model(transport)
+        await model.start()
+        #expect(await eventually { model.settings != nil })
+        #expect(await model.startImport() == nil)
+        #expect(model.isImporting)
+        await model.shutdown()
+    }
+
+    @Test("saving settings sends only the fields given and reads the settings again")
+    func saveSettings() async throws {
+        let transport = RoutedTransport(try answers(["POST /api/settings": RoutedTransport.json("saveSettings-club")]))
+        let model = try model(transport)
+        await expectThrows { try await model.saveSettings(.init(defaultOrgId: 2)) }
+        await model.start()
+        #expect(await eventually { model.settings != nil })
+        let before = transport.paths.filter { $0 == "/api/settings" }.count
+        try await model.saveSettings(.init(defaultOrgId: 2))
+        let sent = try #require(transport.body("POST /api/settings"))
+        #expect(try JSONSerialization.jsonObject(with: sent) as? [String: Int] == ["defaultOrgId": 2])
+        #expect(transport.paths.filter { $0 == "/api/settings" }.count == before + 2)
+        await model.shutdown()
+    }
+
+    @Test("the Setup window's cue: the server up with no save chosen")
+    func needsSetup() async throws {
+        let model = try model(RoutedTransport(try answers([:])))
+        #expect(!model.needsSetup)
+        await model.start()
+        #expect(await eventually { model.status != nil })
+        #expect(model.needsSetup == (model.status?.configured == false))
+        #expect(model.isReady)
+        await model.shutdown()
+        #expect(!model.needsSetup)
+        #expect(!model.isReady)
+    }
+
+    private func expectThrows(_ work: () async throws -> Void) async {
+        do {
+            try await work()
+            Issue.record("expected an error")
+        } catch {}
+    }
+}
+
 /// Stores reload on the import, the club and restores, once at launch (review N5).
 @Suite("The stores' reload key")
 @MainActor

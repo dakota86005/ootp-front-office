@@ -78,13 +78,15 @@ public final class AppModel {
         state: ServerState,
         status: Components.Schemas.ServerStatus? = nil,
         settings: Components.Schemas.SettingsResponse? = nil,
-        orgs: [Components.Schemas.Org] = []
+        orgs: [Components.Schemas.Org] = [],
+        dataStatus: Components.Schemas.DataStatus? = nil
     ) -> AppModel {
         let model = AppModel(configuration: configuration)
         model.serverState = state
         model.status = status ?? state.connection?.status
         model.settings = settings
         model.orgs = orgs
+        model.dataStatus = dataStatus
         model.club = CurrentClub.from(served: settings?.organization, orgs: orgs)
         return model
     }
@@ -118,6 +120,13 @@ public final class AppModel {
     public var exportedAt: String? { status?.csvExportedAt }
     /// Since when a fresh export has waited to be imported (as served).
     public var exportPendingSince: String? { status?.exportPending }
+    /// The server is up and has no save chosen: the Setup window's cue (SWIFTUI_REBUILD.md section 3.1).
+    public var needsSetup: Bool {
+        guard serverState.connection != nil, let status else { return false }
+        return !status.configured
+    }
+    /// The server is up and answered its status check.
+    public var isReady: Bool { serverState.connection != nil }
     /// The server's log file, for Show Log.
     public var logFile: URL { configuration.logFile }
     /// The data folder the server reports, else the one it was started on.
@@ -177,6 +186,43 @@ public final class AppModel {
         if !shuttingDown { await controller.start() }
         return try result.get()
     }
+
+    // MARK: Asking the server to do something
+
+    /// Club ▸ Refresh Data and Settings ▸ Import Now (React's `hardRefresh`): starts an import of the configured save's
+    /// export. Progress arrives on the event stream, and when the import lands `importStamp` moves, so every store
+    /// reloads. Returns the server's own sentence when it refused (no save chosen, the export folder missing), or a
+    /// description of the error when the request failed; nil when the import started.
+    @discardableResult
+    public func startImport() async -> String? {
+        guard let client else { return nil }
+        do {
+            switch try await client.startImport() {
+            case .ok:
+                status?.importing = true
+                return nil
+            case .badRequest(let refused):
+                return try refused.body.json.error
+            case .undocumented(let code, _):
+                return "HTTP \(code)"
+            }
+        } catch {
+            note(error, reading: "import")
+            return String(describing: error)
+        }
+    }
+
+    /// Saves preferences (`POST /api/settings`: the club the Setup window picked, the appearance); a field left nil
+    /// keeps its value. The settings, the clubs and the current club are read again afterwards, so the served club
+    /// (and with it `storeKey`) follows.
+    public func saveSettings(_ update: Components.Schemas.SettingsUpdate) async throws {
+        guard let client else { throw NotReady() }
+        _ = try await client.saveSettings(body: .json(update)).ok
+        await reloadAll()
+    }
+
+    /// The server is not running, so nothing could be asked of it.
+    public struct NotReady: Error, Sendable {}
 
     // MARK: Following the server
 
