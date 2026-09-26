@@ -18,10 +18,12 @@ describe('an import step in words', () => {
     expect(importWords({ table: 'indexes', fileIndex: 70, files: 70, rows: 9, phase: 'indexing' }).display).toBe('Getting the league ready');
   });
 
-  it('names a table it does not know from its file name, without the underscores', () => {
-    expect(tableName('league_history_batting_stats')).toBe('league history batting stats');
+  it('reads a file it has no name for as the export, never its OOTP file name (that stays in the help tag)', () => {
+    expect(tableName('league_history_batting_stats')).toBeNull();
     expect(tableName('team_fielding_stats_stats')).toBe('team fielding');
-    expect(tableName('a__b_b')).toBe('a b');
+    expect(importWords({ table: 'players_value', fileIndex: 12, files: 70, rows: 9, phase: 'writing' })).toEqual({
+      phase: 'Writing the league', table: 'The export', display: 'Writing the export · 12 of 70',
+    });
   });
 });
 

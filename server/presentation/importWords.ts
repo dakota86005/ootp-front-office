@@ -46,22 +46,19 @@ const TABLE_NAMES: Record<string, string> = {
   nations: 'nations',
 };
 
-/** A table's name for a person: a known one in words, any other one from its file name with the underscores dropped. */
-export function tableName(table: string): string {
-  const known = TABLE_NAMES[table];
-  if (known) return known;
-  const words = table.replace(/_+/g, ' ').trim().split(/\s+/).filter((w, i, all) => w !== all[i - 1]);
-  return words.length ? words.join(' ') : 'a table';
+/** A table's name for a person, or null for a file this list does not name (its OOTP file name stays in the help tag). */
+export function tableName(table: string): string | null {
+  return TABLE_NAMES[table] ?? null;
 }
 
 const capitalize = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 
-/** An import step in words. */
+/** An import step in words; a file with no name for a person reads as the export. */
 export function importWords(step: ImportStep): ImportWords {
   if (step.phase === 'indexing') {
     return { phase: 'Getting the league ready', table: 'The league', display: 'Getting the league ready' };
   }
-  const name = tableName(step.table);
+  const name = tableName(step.table) ?? 'the export';
   const verb = step.phase === 'reading' ? 'Reading' : 'Writing';
   return {
     phase: step.phase === 'reading' ? 'Reading the export' : 'Writing the league',

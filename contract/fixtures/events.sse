@@ -5,7 +5,7 @@ event: import-started
 data: {"type":"import-started","startedAt":"2040-07-01T12:00:00.000Z"}
 
 event: import-progress
-data: {"type":"import-progress","progress":{"table":"zz_contract","fileIndex":1,"files":1,"rows":0,"phase":"reading","words":{"phase":"Reading the export","table":"Zz contract","display":"Reading zz contract · 1 of 1"}}}
+data: {"type":"import-progress","progress":{"table":"zz_contract","fileIndex":1,"files":1,"rows":0,"phase":"reading","words":{"phase":"Reading the export","table":"The export","display":"Reading the export · 1 of 1"}}}
 
 event: import-finished
 data: {"type":"import-finished","lastImport":{"tables":1,"rows":2,"startedAt":"2040-07-01T12:00:00.000Z","finishedAt":"2040-07-01T12:00:00.000Z","files":[{"table":"zz_contract","rows":2}]},"error":null,"note":null}
